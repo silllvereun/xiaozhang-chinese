@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>샤오장의 중국어학습</title>
+<meta name="description" content="HSK1/2, HSKK초급, 회화, 업무, 금융, 거래소, IT/개발, 암호화폐 단어를 암기하고 중국어 작문을 연습하는 개인용 학습 앱">
+<meta property="og:title" content="샤오장의 중국어학습">
+<meta property="og:description" content="중국어 단어 암기 + 작문 연습 웹앱">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://silllvereun.github.io/xiaozhang-chinese/">
+<link rel="canonical" href="https://silllvereun.github.io/xiaozhang-chinese/">
+<meta name="robots" content="index,follow">
+<style>
+  :root{
+    --bg:#f6f5f2;
+    --card:#ffffff;
+    --ink:#26241f;
+    --sub:#7a776d;
+    --accent:#e0603f;
+    --accent-ink:#ffffff;
+    --line:#e7e3da;
+    --good:#3f8f5c;
+    --bad:#c94b3f;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",-apple-system,BlinkMacSystemFont,sans-serif;
+    line-height:1.5;
+  }
+  #app{
+    max-width:720px;
+    margin:0 auto;
+    padding:16px 16px 60px;
+    min-height:100vh;
+  }
+  h1,h2,h3{margin:0 0 8px;}
+  h1{font-size:20px;}
+  .subtitle{color:var(--sub);font-size:13px;margin-bottom:16px;}
+  .topnav{
+    display:flex;
+    gap:6px;
+    overflow-x:auto;
+    margin-bottom:16px;
+    padding-bottom:4px;
+    border-bottom:1px solid var(--line);
+  }
+  .tab{
+    flex:0 0 auto;
+    padding:8px 14px;
+    border-radius:999px;
+    background:transparent;
+    border:1px solid transparent;
+    color:var(--sub);
+    font-size:14px;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .tab.active{
+    background:var(--accent);
+    color:var(--accent-ink);
+    font-weight:600;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px;
+    margin-bottom:14px;
+  }
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    padding:10px 16px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#fff;
+    color:var(--ink);
+    font-size:14px;
+    cursor:pointer;
+  }
+  .btn:active{transform:scale(0.98);}
+  .btn-primary{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:var(--accent-ink);
+    font-weight:600;
+  }
+  .btn-ghost{
+    background:transparent;
+    border-color:transparent;
+    color:var(--sub);
+  }
+  .btn-danger{
+    color:var(--bad);
+    border-color:#f0d3ce;
+  }
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .btn:disabled{opacity:0.4;cursor:not-allowed;}
+  input[type=text],input[type=number],textarea,select{
+    width:100%;
+    padding:10px 12px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#fff;
+    color:var(--ink);
+    font-size:15px;
+    font-family:inherit;
+  }
+  textarea{resize:vertical;min-height:72px;}
+  label.field{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px;}
+  .group-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+    gap:8px;
+    margin:10px 0;
+  }
+  .group-chip{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:8px 10px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    font-size:13px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .group-chip.on{
+    border-color:var(--accent);
+    background:#fdece7;
+  }
+  .row-between{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .check-row{display:flex;align-items:center;gap:8px;font-size:14px;margin:8px 0;}
+  .quiz-progress{color:var(--sub);font-size:13px;margin-bottom:6px;}
+  .quiz-meaning{font-size:26px;font-weight:700;margin:18px 0;text-align:center;}
+  .quiz-hint{text-align:center;color:var(--sub);font-size:13px;margin-bottom:14px;}
+  .feedback{
+    margin-top:12px;
+    padding:12px;
+    border-radius:10px;
+    font-size:14px;
+  }
+  .feedback.correct{background:#e8f5ec;color:var(--good);}
+  .feedback.wrong{background:#fbeae7;color:var(--bad);}
+  .feedback .answer{font-size:20px;font-weight:700;margin-top:4px;}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin:14px 0;}
+  .stat-box{background:var(--bg);border-radius:10px;padding:10px;}
+  .stat-box .num{font-size:20px;font-weight:700;}
+  .stat-box .label{font-size:12px;color:var(--sub);}
+  .word-list{display:flex;flex-direction:column;gap:8px;}
+  .word-item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:10px 12px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:#fff;
+  }
+  .word-main{flex:1;min-width:0;}
+  .word-hanzi{font-size:18px;font-weight:700;}
+  .word-pinyin{font-size:13px;color:var(--sub);}
+  .word-meaning{font-size:13px;color:var(--sub);}
+  .badge{
+    display:inline-block;
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:999px;
+    background:var(--bg);
+    color:var(--sub);
+    margin-right:6px;
+  }
+  .icon-btn{
+    background:none;
+    border:none;
+    cursor:pointer;
+    font-size:16px;
+    padding:4px;
+    color:var(--sub);
+  }
+  .icon-btn.starred{color:#e0a83f;}
+  .notes-tabs{display:flex;gap:8px;margin-bottom:12px;}
+  .empty{color:var(--sub);font-size:14px;text-align:center;padding:30px 0;}
+  .checklist{list-style:none;padding:0;margin:12px 0;font-size:14px;}
+  .checklist li{padding:4px 0;}
+  .checklist li.ok{color:var(--good);}
+  .checklist li.no{color:var(--bad);}
+  .file-hidden{display:none;}
+  a.hidden-link{display:none;}
+  small.hint{color:var(--sub);font-size:12px;}
+  .top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+
+/* ---------------- Seed data ---------------- */
+const RAW_WORDS = {
+  "HSK1": `你好|nǐ hǎo|안녕하세요
+谢谢|xièxie|감사합니다
+再见|zàijiàn|안녕(헤어질 때)
+对不起|duìbuqǐ|미안합니다
+没关系|méi guānxi|괜찮습니다
+是|shì|~이다
+不|bù|아니다
+我|wǒ|나
+你|nǐ|너
+他|tā|그(남자)
+她|tā|그녀
+这|zhè|이것
+那|nà|저것
+什么|shénme|무엇
+谁|shéi|누구
+哪儿|nǎr|어디
+现在|xiànzài|지금
+今天|jīntiān|오늘
+明天|míngtiān|내일
+昨天|zuótiān|어제
+年|nián|년
+月|yuè|월
+星期|xīngqī|요일/주
+点|diǎn|시(시간)
+吃|chī|먹다
+喝|hē|마시다
+米饭|mǐfàn|쌀밥
+水|shuǐ|물
+茶|chá|차
+苹果|píngguǒ|사과
+喜欢|xǐhuan|좋아하다
+爱|ài|사랑하다
+想|xiǎng|생각하다/원하다
+看|kàn|보다
+听|tīng|듣다
+说|shuō|말하다
+读|dú|읽다
+写|xiě|쓰다
+学习|xuéxí|공부하다
+学生|xuésheng|학생
+老师|lǎoshī|선생님
+学校|xuéxiào|학교
+朋友|péngyou|친구
+家|jiā|집
+爸爸|bàba|아빠
+妈妈|māma|엄마
+医生|yīshēng|의사
+商店|shāngdiàn|상점
+钱|qián|돈
+买|mǎi|사다
+多少|duōshao|얼마
+大|dà|크다
+小|xiǎo|작다
+多|duō|많다
+少|shǎo|적다
+好|hǎo|좋다
+高兴|gāoxìng|기쁘다
+漂亮|piàoliang|예쁘다
+冷|lěng|춥다
+热|rè|덥다
+天气|tiānqì|날씨
+去|qù|가다
+来|lái|오다
+在|zài|~에 있다
+有|yǒu|있다/가지다
+没有|méiyǒu|없다
+一|yī|하나(1)
+二|èr|둘(2)
+三|sān|셋(3)
+四|sì|넷(4)
+五|wǔ|다섯(5)
+六|liù|여섯(6)
+七|qī|일곱(7)
+八|bā|여덟(8)
+九|jiǔ|아홉(9)
+十|shí|열(10)
+百|bǎi|백(100)
+岁|suì|살(나이)
+块|kuài|위안(화폐 단위)
+元|yuán|위안(화폐 단위)
+号|hào|일(날짜)/번호
+很|hěn|매우
+和|hé|~와/과
+太|tài|너무
+都|dōu|모두
+也|yě|또한
+了|le|~했다(완료)
+吗|ma|~까?(의문조사)
+呢|ne|~는요?
+里|lǐ|안/속
+上|shàng|위
+下|xià|아래
+上午|shàngwǔ|오전
+下午|xiàwǔ|오후
+下雨|xiàyǔ|비가 오다
+儿子|érzi|아들
+女儿|nǚ'ér|딸
+同学|tóngxué|학우/급우
+先生|xiānsheng|~씨/선생님(존칭)
+小姐|xiǎojiě|아가씨
+医院|yīyuàn|병원
+北京|běijīng|베이징
+中国|zhōngguó|중국
+杯子|bēizi|컵
+电脑|diànnǎo|컴퓨터
+电视|diànshì|텔레비전
+电影|diànyǐng|영화
+衣服|yīfu|옷
+椅子|yǐzi|의자
+桌子|zhuōzi|책상
+猫|māo|고양이`,
+  "HSK2": `认识|rènshi|알다(사람을)
+觉得|juéde|느끼다/생각하다
+知道|zhīdào|알다
+希望|xīwàng|희망하다
+准备|zhǔnbèi|준비하다
+开始|kāishǐ|시작하다
+完|wán|끝나다
+还|hái|아직/또
+已经|yǐjīng|이미
+就|jiù|곧/바로
+一起|yìqǐ|함께
+一直|yìzhí|계속
+非常|fēicháng|매우
+特别|tèbié|특별히
+比较|bǐjiào|비교적
+比|bǐ|~보다
+最|zuì|가장
+所以|suǒyǐ|그래서
+因为|yīnwèi|왜냐하면
+但是|dànshì|그러나
+可是|kěshì|하지만
+虽然|suīrán|비록
+如果|rúguǒ|만약
+或者|huòzhě|혹은
+可以|kěyǐ|~할 수 있다
+应该|yīnggāi|마땅히 ~해야 한다
+能|néng|~할 수 있다
+会|huì|~할 줄 알다
+必须|bìxū|반드시
+让|ràng|~하게 하다
+帮助|bāngzhù|돕다
+告诉|gàosu|알려주다
+问|wèn|묻다
+回答|huídá|대답하다
+同意|tóngyì|동의하다
+决定|juédìng|결정하다
+选择|xuǎnzé|선택하다
+提高|tígāo|향상시키다
+参加|cānjiā|참가하다
+运动|yùndòng|운동
+旅游|lǚyóu|여행
+机场|jīchǎng|공항
+飞机|fēijī|비행기
+火车|huǒchē|기차
+地铁|dìtiě|지하철
+路|lù|길
+远|yuǎn|멀다
+近|jìn|가깝다
+男|nán|남자
+女|nǚ|여자
+弟弟|dìdi|남동생
+妹妹|mèimei|여동생
+哥哥|gēge|형/오빠
+姐姐|jiějie|누나/언니
+爱好|àihào|취미
+唱歌|chànggē|노래를 부르다
+跳舞|tiàowǔ|춤을 추다
+游泳|yóuyǒng|수영하다
+打篮球|dǎ lánqiú|농구를 하다
+踢足球|tī zúqiú|축구를 하다
+音乐|yīnyuè|음악
+电子邮件|diànzǐ yóujiàn|이메일
+手机|shǒujī|휴대폰
+照片|zhàopiàn|사진
+房间|fángjiān|방
+教室|jiàoshì|교실
+图书馆|túshūguǎn|도서관
+公司|gōngsī|회사
+城市|chéngshì|도시
+公园|gōngyuán|공원
+门|mén|문
+窗户|chuānghu|창문
+附近|fùjìn|근처
+左边|zuǒbian|왼쪽
+右边|yòubian|오른쪽
+中间|zhōngjiān|중간
+对面|duìmiàn|맞은편
+一样|yíyàng|같다
+不同|bùtóng|다르다
+简单|jiǎndān|간단하다
+容易|róngyì|쉽다
+难|nán|어렵다
+重要|zhòngyào|중요하다
+认真|rènzhēn|성실하다
+努力|nǔlì|노력하다
+复习|fùxí|복습하다
+考试|kǎoshì|시험
+成绩|chéngjì|성적
+检查|jiǎnchá|검사하다
+换|huàn|바꾸다
+借|jiè|빌리다
+还给|huángěi|돌려주다
+花|huā|꽃/(돈을)쓰다`,
+  "HSKK초급": `我叫|wǒ jiào|제 이름은 ~입니다
+我今年|wǒ jīnnián|저는 올해(나이)
+我是韩国人|wǒ shì hánguórén|저는 한국인입니다
+很高兴认识你|hěn gāoxìng rènshi nǐ|만나서 반갑습니다
+请问|qǐngwèn|실례합니다(질문 시)
+麻烦你|máfan nǐ|번거롭게 해서 죄송합니다
+没问题|méi wèntí|문제없습니다
+当然|dāngrán|당연히
+一定|yídìng|반드시
+差不多|chàbuduō|거의
+马上|mǎshàng|곧
+慢慢|mànmàn|천천히
+快点儿|kuài diǎnr|빨리 좀
+再说一遍|zài shuō yíbiàn|다시 한번 말해주세요
+听不懂|tīng bu dǒng|못 알아듣겠어요
+我喜欢中国|wǒ xǐhuan zhōngguó|저는 중국을 좋아해요
+我家有三口人|wǒ jiā yǒu sān kǒu rén|우리 가족은 세 명이에요
+你叫什么名字|nǐ jiào shénme míngzi|이름이 뭐예요?
+请再说一次|qǐng zài shuō yí cì|다시 한번 말씀해주세요
+我不太清楚|wǒ bú tài qīngchu|저는 잘 모르겠어요
+谢谢你的帮助|xièxie nǐ de bāngzhù|도와주셔서 감사합니다
+祝贺你|zhùhè nǐ|축하드립니다
+欢迎光临|huānyíng guānglín|어서 오세요(환영합니다)
+请稍等|qǐng shāo děng|잠시만 기다려주세요
+打扰一下|dǎrǎo yíxià|잠깐 실례하겠습니다`,
+  "회화": `你吃饭了吗|nǐ chīfàn le ma|밥 먹었어?
+最近怎么样|zuìjìn zěnmeyàng|요즘 어때?
+没事儿|méishìr|괜찮아(별일 아니야)
+随便|suíbiàn|아무거나/편한 대로
+算了|suànle|됐어(그만두자)
+真的吗|zhēnde ma|정말이야?
+你说什么|nǐ shuō shénme|뭐라고 했어?
+等一下|děng yíxià|잠깐만 기다려
+不好意思|bùhǎoyìsi|죄송합니다/실례합니다
+辛苦了|xīnkǔ le|수고했어요
+加油|jiāyóu|힘내
+恭喜|gōngxǐ|축하해
+祝你好运|zhù nǐ hǎoyùn|행운을 빌어
+我请客|wǒ qǐngkè|내가 살게
+下次见|xiàcì jiàn|다음에 봐
+保重|bǎozhòng|몸조심해
+慢走|mànzǒu|조심히 가세요(배웅)
+路上小心|lùshang xiǎoxīn|가는 길 조심해
+好久不见|hǎojiǔ bújiàn|오랜만이야
+干嘛呢|gànmá ne|뭐 해?
+走吧|zǒu ba|가자
+太好了|tài hǎo le|너무 잘됐다
+怎么办|zěnme bàn|어떡하지
+别担心|bié dānxīn|걱정하지 마
+你先请|nǐ xiān qǐng|먼저 하세요
+我也是|wǒ yě shì|저도요
+有意思|yǒu yìsi|재미있다
+没意思|méi yìsi|재미없다
+你觉得呢|nǐ juéde ne|네 생각은 어때?
+我请你吃饭|wǒ qǐng nǐ chīfàn|내가 밥 살게`,
+  "업무": `会议|huìyì|회의
+报告|bàogào|보고(서)
+项目|xiàngmù|프로젝트
+任务|rènwu|임무/업무
+截止日期|jiézhǐ rìqī|마감일
+同事|tóngshì|동료
+老板|lǎobǎn|사장
+客户|kèhù|고객
+合同|hétong|계약(서)
+邮件|yóujiàn|메일
+签字|qiānzì|서명하다
+出差|chūchāi|출장
+加班|jiābān|야근하다
+休息|xiūxi|휴식하다
+请假|qǐngjià|휴가를 신청하다
+工资|gōngzī|월급
+奖金|jiǎngjīn|보너스
+升职|shēngzhí|승진하다
+辞职|cízhí|퇴사하다
+面试|miànshì|면접
+部门|bùmén|부서
+团队|tuánduì|팀
+计划|jìhuà|계획
+目标|mùbiāo|목표
+效率|xiàolǜ|효율
+沟通|gōutōng|소통하다
+会议室|huìyìshì|회의실
+简历|jiǎnlì|이력서
+培训|péixùn|교육/트레이닝
+通知|tōngzhī|공지하다`,
+  "금융": `银行|yínháng|은행
+账户|zhànghù|계좌
+存款|cúnkuǎn|예금
+贷款|dàikuǎn|대출
+利息|lìxī|이자
+汇率|huìlǜ|환율
+投资|tóuzī|투자
+股票|gǔpiào|주식
+基金|jījīn|펀드
+风险|fēngxiǎn|리스크
+收益|shōuyì|수익
+资产|zīchǎn|자산
+负债|fùzhài|부채
+预算|yùsuàn|예산
+税|shuì|세금
+现金|xiànjīn|현금
+信用卡|xìnyòngkǎ|신용카드
+转账|zhuǎnzhàng|계좌이체
+利率|lìlǜ|금리
+保险|bǎoxiǎn|보험
+债券|zhàiquàn|채권
+通货膨胀|tōnghuò péngzhàng|인플레이션
+财务|cáiwù|재무`,
+  "거래소": `交易所|jiāoyìsuǒ|거래소
+交易|jiāoyì|거래
+买入|mǎirù|매수
+卖出|màichū|매도
+挂单|guàdān|지정가 주문
+市价|shìjià|시장가
+限价|xiànjià|지정가
+成交|chéngjiāo|체결
+手续费|shǒuxùfèi|수수료
+充值|chōngzhí|입금(충전)
+提现|tíxiàn|출금
+涨|zhǎng|오르다
+跌|diē|내리다
+行情|hángqíng|시세
+爆仓|bàocāng|청산(강제청산)
+订单|dìngdān|주문
+撤单|chèdān|주문 취소
+深度|shēndù|(호가) 깊이
+波动|bōdòng|변동
+均价|jūnjià|평균가
+持仓|chícāng|보유 포지션
+平仓|píngcāng|포지션 청산
+止损|zhǐsǔn|손절`,
+  "IT/개발": `代码|dàimǎ|코드
+程序|chéngxù|프로그램
+软件|ruǎnjiàn|소프트웨어
+硬件|yìngjiàn|하드웨어
+数据库|shùjùkù|데이터베이스
+服务器|fúwùqì|서버
+网络|wǎngluò|네트워크
+系统|xìtǒng|시스템
+测试|cèshì|테스트
+调试|tiáoshì|디버깅
+部署|bùshǔ|배포
+接口|jiēkǒu|인터페이스(API)
+函数|hánshù|함수
+变量|biànliàng|변수
+错误|cuòwù|에러
+修复|xiūfù|수정하다(고치다)
+更新|gēngxīn|업데이트하다
+版本|bǎnběn|버전
+用户|yònghù|사용자
+界面|jièmiàn|화면(UI)
+算法|suànfǎ|알고리즘
+框架|kuàngjià|프레임워크
+开发|kāifā|개발하다
+编程|biānchéng|프로그래밍
+文档|wéndàng|문서
+云|yún|클라우드
+权限|quánxiàn|권한
+密码|mìmǎ|비밀번호
+备份|bèifèn|백업
+日志|rìzhì|로그`,
+  "암호화폐": `区块链|qūkuàiliàn|블록체인
+比特币|bǐtèbì|비트코인
+以太坊|yǐtàifāng|이더리움
+钱包|qiánbāo|지갑
+私钥|sīyào|개인키
+公钥|gōngyào|공개키
+挖矿|wākuàng|채굴하다
+矿工|kuànggōng|채굴자
+节点|jiédiǎn|노드
+智能合约|zhìnéng héyuē|스마트컨트랙트
+去中心化|qùzhōngxīnhuà|탈중앙화
+代币|dàibì|토큰
+空投|kōngtóu|에어드랍
+质押|zhìyā|스테이킹
+杠杆|gànggǎn|레버리지
+做多|zuòduō|롱(매수 포지션)
+做空|zuòkōng|숏(매도 포지션)
+稳定币|wěndìngbì|스테이블코인
+合约|héyuē|선물(계약)
+链上|liànshàng|온체인
+冷钱包|lěng qiánbāo|콜드월렛
+热钱包|rè qiánbāo|핫월렛
+助记词|zhùjìcí|니모닉(복구 구문)
+白皮书|báipíshū|백서
+交易对|jiāoyìduì|거래쌍(페어)
+市值|shìzhí|시가총액`
+};
+
+const GROUP_ORDER = ["HSK1","HSK2","HSKK초급","회화","업무","금융","거래소","IT/개발","암호화폐"];
+
+function buildInitialWords(){
+  let n = 0;
+  const words = [];
+  GROUP_ORDER.forEach(group=>{
+    const block = RAW_WORDS[group] || "";
+    block.trim().split("\n").forEach(line=>{
+      if(!line.trim()) return;
+      const parts = line.split("|");
+      const hanzi = parts[0] || "";
+      const pinyin = parts[1] || "";
+      const meaning = parts[2] || "";
+      n += 1;
+      words.push({
+        id: "w" + String(n).padStart(3,"0"),
+        category: group,
+        group: group,
+        hanzi: hanzi,
+        pinyin: pinyin,
+        meaning: meaning,
+        note: "",
+        starred: false
+      });
+    });
+  });
+  return words;
+}
+const INITIAL_WORDS = buildInitialWords();
+
+/* ---------------- Storage (localStorage now, Supabase-ready abstraction) ---------------- */
+async function dbGet(key){
+  const raw = localStorage.getItem(key);
+  return raw ? JSON.parse(raw) : null;
+}
+async function dbSet(key, value){
+  localStorage.setItem(key, JSON.stringify(value));
+}
+async function dbDelete(key){
+  localStorage.removeItem(key);
+}
+
+let WORDS = [];
+let wordStats = {};
+
+let persistWordsTimer = null;
+function persistWordList(){
+  clearTimeout(persistWordsTimer);
+  return new Promise(resolve=>{
+    persistWordsTimer = setTimeout(async ()=>{
+      await dbSet("wordList", WORDS);
+      resolve();
+    }, 300);
+  });
+}
+let persistStatsTimer = null;
+function persistStats(){
+  clearTimeout(persistStatsTimer);
+  return new Promise(resolve=>{
+    persistStatsTimer = setTimeout(async ()=>{
+      await dbSet("wordStats", wordStats);
+      resolve();
+    }, 300);
+  });
+}
+async function loadWordList(){
+  const saved = await dbGet("wordList");
+  if(saved && saved.length){
+    WORDS = saved;
+  } else {
+    WORDS = INITIAL_WORDS.map(w=>({...w}));
+    await dbSet("wordList", WORDS);
+  }
+}
+async function loadStats(){
+  const saved = await dbGet("wordStats");
+  wordStats = saved || {};
+}
+
+async function addWord(data){
+  const id = "w" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  WORDS.push({
+    id,
+    category: data.category,
+    group: data.category,
+    hanzi: data.hanzi,
+    pinyin: data.pinyin,
+    meaning: data.meaning,
+    note: data.note || "",
+    starred: !!data.starred
+  });
+  await persistWordList();
+}
+async function updateWord(id, patch){
+  const w = WORDS.find(x=>x.id===id);
+  if(!w) return;
+  Object.assign(w, patch);
+  if(patch.category){ w.group = patch.category; }
+  await persistWordList();
+}
+async function deleteWord(id){
+  WORDS = WORDS.filter(x=>x.id!==id);
+  delete wordStats[id];
+  await persistWordList();
+  await persistStats();
+}
+async function toggleStar(id){
+  const w = WORDS.find(x=>x.id===id);
+  if(!w) return;
+  w.starred = !w.starred;
+  await persistWordList();
+}
+
+/* ---------------- Quiz logic helpers ---------------- */
+function wrongCountOf(id){ return (wordStats[id] && wordStats[id].wrong) || 0; }
+function daysSinceSeen(id){
+  const last = wordStats[id] && wordStats[id].lastSeen;
+  if(!last) return 999;
+  return (Date.now() - new Date(last).getTime()) / 86400000;
+}
+function weightOf(id){
+  return 1 + wrongCountOf(id) * 3 + Math.min(daysSinceSeen(id), 30) / 5;
+}
+function pool(){
+  return WORDS.filter(w=>{
+    if(!state.selectedGroups.has(w.group)) return false;
+    if(state.starredOnly && !w.starred) return false;
+    if(state.reviewMode && wrongCountOf(w.id) === 0) return false;
+    return true;
+  });
+}
+function weightedSample(arr, n){
+  const src = arr.slice();
+  const picked = [];
+  n = Math.min(n, src.length);
+  for(let i=0;i<n;i++){
+    const weights = src.map(w=>weightOf(w.id));
+    const total = weights.reduce((a,b)=>a+b, 0);
+    let r = Math.random() * total;
+    let idx = 0;
+    for(; idx < weights.length; idx++){
+      r -= weights[idx];
+      if(r <= 0) break;
+    }
+    if(idx >= src.length) idx = src.length - 1;
+    picked.push(src[idx]);
+    src.splice(idx, 1);
+  }
+  return picked;
+}
+function stripTones(s){
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+function normalize(s){
+  return stripTones(String(s).trim().toLowerCase()).replace(/['’\-\s]/g, "");
+}
+function isHanziInput(s){
+  return /[一-鿿]/.test(s);
+}
+function checkAnswer(word, input){
+  const trimmed = String(input || "").trim();
+  if(!trimmed) return false;
+  if(isHanziInput(trimmed)) return trimmed === word.hanzi;
+  return normalize(trimmed) === normalize(word.pinyin);
+}
+function recordAnswer(word, outcome){
+  const s = wordStats[word.id] || {wrong:0, correct:0, seen:0, passed:0, lastSeen:null};
+  s.seen += 1;
+  s.lastSeen = new Date().toISOString();
+  if(outcome === "correct"){
+    s.correct += 1;
+    s.wrong = Math.max(0, s.wrong - 1);
+  } else if(outcome === "wrong"){
+    s.wrong += 1;
+  } else if(outcome === "passed"){
+    s.passed += 1;
+    s.wrong += 1;
+  }
+  wordStats[word.id] = s;
+  persistStats();
+}
+
+/* ---------------- Sentence grading (rule-based, no server required) ---------------- */
+function gradeSentence(word, text){
+  const trimmed = String(text || "").trim();
+  const hasWord = trimmed.includes(word.hanzi);
+  const hanziCount = (trimmed.match(/[一-鿿]/g) || []).length;
+  const longEnough = hanziCount >= 4;
+  const endsProperly = /[。！？!?]$/.test(trimmed);
+  const noKorean = !/[가-힣]/.test(trimmed);
+  const items = [
+    {ok: hasWord, label: `목표 단어 "${word.hanzi}" 포함`},
+    {ok: longEnough, label: "한자 4자 이상으로 작성"},
+    {ok: endsProperly, label: "문장부호(。！？)로 끝맺기"},
+    {ok: noKorean, label: "중국어로만 작성(한글 미포함)"}
+  ];
+  const passCount = items.filter(i=>i.ok).length;
+  return {
+    pass: passCount === items.length,
+    items
+  };
+}
+
+/* ---------------- TTS ---------------- */
+function speak(text){
+  if(!("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "zh-CN";
+  u.rate = 0.9;
+  window.speechSynthesis.speak(u);
+}
+
+/* ---------------- Misc helpers ---------------- */
+function h(s){
+  return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function downloadJSON(filename, obj){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.className = "hidden-link";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ---------------- State ---------------- */
+const state = {
+  mode: "quiz",
+  screen: "setup",
+  selectedGroups: new Set(GROUP_ORDER),
+  starredOnly: false,
+  reviewMode: false,
+  quizSize: 15,
+  quizWords: [],
+  quizIndex: 0,
+  answered: false,
+  lastCorrect: false,
+  input: "",
+  quizResults: [],
+  notesTab: "wrong",
+  manage: {query: "", editingId: null, showAdd: false},
+  sentence: {word: null, text: "", result: null}
+};
+
+const app = document.getElementById("app");
+
+function render(){
+  let body = "";
+  if(state.mode === "quiz"){
+    if(state.screen === "setup") body = renderSetup();
+    else if(state.screen === "quiz") body = renderQuiz();
+    else if(state.screen === "result") body = renderResult();
+  } else if(state.mode === "sentence"){
+    body = renderSentence();
+  } else if(state.mode === "notes"){
+    body = renderNotes();
+  } else if(state.mode === "manage"){
+    body = renderManage();
+  }
+  app.innerHTML = `
+    <div class="top-bar">
+      <h1>샤오장의 중국어학습</h1>
+    </div>
+    <div class="subtitle">단어 ${WORDS.length}개 · 병음/한자 모두 정답 인정</div>
+    ${renderTopNav()}
+    ${body}
+  `;
+  bindGlobalNav();
+  if(state.mode === "quiz" && state.screen === "setup") bindSetup();
+  if(state.mode === "quiz" && state.screen === "quiz") bindQuiz();
+  if(state.mode === "quiz" && state.screen === "result") bindResult();
+  if(state.mode === "sentence") bindSentence();
+  if(state.mode === "notes") bindNotes();
+  if(state.mode === "manage") bindManage();
+}
+
+function renderTopNav(){
+  const tabs = [
+    {id:"quiz", label:"단어 시험"},
+    {id:"sentence", label:"문장 만들기"},
+    {id:"notes", label:"복습 노트"},
+    {id:"manage", label:"단어장 관리"}
+  ];
+  return `<div class="topnav">
+    ${tabs.map(t=>`<button class="tab ${state.mode===t.id?"active":""}" data-nav="${t.id}">${t.label}</button>`).join("")}
+  </div>`;
+}
+function bindGlobalNav(){
+  app.querySelectorAll("[data-nav]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const target = btn.getAttribute("data-nav");
+      state.mode = target;
+      if(target === "quiz") state.screen = "setup";
+      if(target === "sentence") pickSentenceWord();
+      render();
+    });
+  });
+}
+
+/* ---------------- Setup screen ---------------- */
+function renderSetup(){
+  const count = pool().length;
+  return `
+  <div class="card">
+    <h3>학습 범위 선택</h3>
+    <div class="group-grid">
+      ${GROUP_ORDER.map(g=>`
+        <div class="group-chip ${state.selectedGroups.has(g)?"on":""}" data-group="${h(g)}">
+          <span>${h(g)}</span>
+        </div>
+      `).join("")}
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="selectAll">전체 선택</button>
+      <button class="btn btn-ghost" id="selectNone">전체 해제</button>
+    </div>
+    <label class="check-row"><input type="checkbox" id="starredOnly" ${state.starredOnly?"checked":""}> 즐겨찾기한 단어만</label>
+    <label class="check-row"><input type="checkbox" id="reviewMode" ${state.reviewMode?"checked":""}> 복습 모드 (틀린 단어만 출제)</label>
+    <label class="field">문제 수</label>
+    <select id="quizSize">
+      ${[10,15,20,30,50].map(n=>`<option value="${n}" ${state.quizSize===n?"selected":""}>${n}문제</option>`).join("")}
+      <option value="all" ${state.quizSize==="all"?"selected":""}>전체 (${count}문제)</option>
+    </select>
+    <div style="margin-top:16px;">
+      <button class="btn btn-primary" id="startQuiz" ${count===0?"disabled":""} style="width:100%;">시험 시작하기 (${count}단어 중 출제)</button>
+    </div>
+    ${count===0 ? `<div class="empty">선택된 범위에 단어가 없습니다. 범위를 조정해주세요.</div>` : ""}
+  </div>`;
+}
+function bindSetup(){
+  app.querySelectorAll("[data-group]").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const g = el.getAttribute("data-group");
+      if(state.selectedGroups.has(g)) state.selectedGroups.delete(g);
+      else state.selectedGroups.add(g);
+      render();
+    });
+  });
+  const selectAll = document.getElementById("selectAll");
+  const selectNone = document.getElementById("selectNone");
+  if(selectAll) selectAll.addEventListener("click", ()=>{ state.selectedGroups = new Set(GROUP_ORDER); render(); });
+  if(selectNone) selectNone.addEventListener("click", ()=>{ state.selectedGroups = new Set(); render(); });
+  const starredOnly = document.getElementById("starredOnly");
+  if(starredOnly) starredOnly.addEventListener("change", e=>{ state.starredOnly = e.target.checked; render(); });
+  const reviewMode = document.getElementById("reviewMode");
+  if(reviewMode) reviewMode.addEventListener("change", e=>{ state.reviewMode = e.target.checked; render(); });
+  const quizSize = document.getElementById("quizSize");
+  if(quizSize) quizSize.addEventListener("change", e=>{
+    const v = e.target.value;
+    state.quizSize = v === "all" ? "all" : Number(v);
+  });
+  const startBtn = document.getElementById("startQuiz");
+  if(startBtn) startBtn.addEventListener("click", startQuiz);
+}
+function startQuiz(){
+  const p = pool();
+  const n = state.quizSize === "all" ? p.length : state.quizSize;
+  state.quizWords = weightedSample(p, n);
+  state.quizIndex = 0;
+  state.answered = false;
+  state.lastCorrect = false;
+  state.input = "";
+  state.quizResults = [];
+  state.screen = "quiz";
+  render();
+}
+
+/* ---------------- Quiz screen ---------------- */
+function currentWord(){
+  return state.quizWords[state.quizIndex];
+}
+function renderQuiz(){
+  const word = currentWord();
+  if(!word){ state.screen = "result"; return renderResult(); }
+  return `
+  <div class="card">
+    <div class="quiz-progress">${state.quizIndex + 1} / ${state.quizWords.length} · ${h(word.group)}</div>
+    <div class="quiz-meaning">${h(word.meaning)}</div>
+    <div class="quiz-hint">병음 또는 한자로 입력하세요</div>
+    <input type="text" id="answerInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="답 입력..." value="${h(state.input)}" ${state.answered?"disabled":""}>
+    ${state.answered ? `
+      <div class="feedback ${state.lastCorrect?"correct":"wrong"}">
+        ${state.lastCorrect ? "정답입니다!" : "오답입니다"}
+        <div class="answer">${h(word.hanzi)} (${h(word.pinyin)})</div>
+      </div>
+    ` : ""}
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn" id="speakBtn">🔊 발음 듣기</button>
+      ${!state.answered ? `
+        <button class="btn" id="passBtn">패스 (Tab)</button>
+        <button class="btn btn-primary" id="checkBtn">확인 (Enter)</button>
+      ` : `
+        <button class="btn btn-primary" id="nextBtn">다음 (Enter)</button>
+      `}
+    </div>
+  </div>`;
+}
+function bindQuiz(){
+  const word = currentWord();
+  if(!word) return;
+  const input = document.getElementById("answerInput");
+  if(input){
+    input.focus();
+    input.addEventListener("input", e=>{ state.input = e.target.value; });
+    input.addEventListener("keydown", e=>{
+      if(e.key === "Enter"){
+        e.preventDefault();
+        if(!state.answered) submitAnswer();
+        else nextQuestion();
+      } else if(e.key === "Tab" && !state.answered){
+        e.preventDefault();
+        passQuestion();
+      }
+    });
+  }
+  const speakBtn = document.getElementById("speakBtn");
+  if(speakBtn) speakBtn.addEventListener("click", ()=>speak(word.hanzi));
+  const checkBtn = document.getElementById("checkBtn");
+  if(checkBtn) checkBtn.addEventListener("click", submitAnswer);
+  const passBtn = document.getElementById("passBtn");
+  if(passBtn) passBtn.addEventListener("click", passQuestion);
+  const nextBtn = document.getElementById("nextBtn");
+  if(nextBtn) nextBtn.addEventListener("click", nextQuestion);
+}
+function submitAnswer(){
+  const word = currentWord();
+  if(!word) return;
+  const correct = checkAnswer(word, state.input);
+  state.answered = true;
+  state.lastCorrect = correct;
+  recordAnswer(word, correct ? "correct" : "wrong");
+  state.quizResults.push({word, outcome: correct ? "correct" : "wrong"});
+  render();
+}
+function passQuestion(){
+  const word = currentWord();
+  if(!word) return;
+  recordAnswer(word, "passed");
+  state.quizResults.push({word, outcome: "passed"});
+  advanceQuiz();
+}
+function nextQuestion(){
+  advanceQuiz();
+}
+function advanceQuiz(){
+  state.quizIndex += 1;
+  state.answered = false;
+  state.lastCorrect = false;
+  state.input = "";
+  if(state.quizIndex >= state.quizWords.length){
+    state.screen = "result";
+  }
+  render();
+}
+
+/* ---------------- Result screen ---------------- */
+function renderResult(){
+  const results = state.quizResults;
+  const correct = results.filter(r=>r.outcome==="correct").length;
+  const wrong = results.filter(r=>r.outcome==="wrong").length;
+  const passed = results.filter(r=>r.outcome==="passed").length;
+  const wrongList = results.filter(r=>r.outcome==="wrong");
+  const passedList = results.filter(r=>r.outcome==="passed");
+  return `
+  <div class="card">
+    <h3>시험 결과</h3>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="num">${correct}</div><div class="label">정답</div></div>
+      <div class="stat-box"><div class="num">${wrong}</div><div class="label">오답</div></div>
+      <div class="stat-box"><div class="num">${passed}</div><div class="label">패스</div></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="retryBtn">다시 시험</button>
+      <button class="btn" id="backSetupBtn">설정으로</button>
+    </div>
+  </div>
+  ${wrongList.length ? `
+  <div class="card">
+    <h3>오답 (${wrongList.length})</h3>
+    <div class="word-list">
+      ${wrongList.map(r=>renderResultWordItem(r.word)).join("")}
+    </div>
+  </div>` : ""}
+  ${passedList.length ? `
+  <div class="card">
+    <h3>패스 (${passedList.length})</h3>
+    <div class="word-list">
+      ${passedList.map(r=>renderResultWordItem(r.word)).join("")}
+    </div>
+  </div>` : ""}
+  `;
+}
+function renderResultWordItem(word){
+  return `
+    <div class="word-item">
+      <div class="word-main">
+        <span class="badge">${h(word.group)}</span>
+        <div class="word-hanzi">${h(word.hanzi)} <span class="word-pinyin">${h(word.pinyin)}</span></div>
+        <div class="word-meaning">${h(word.meaning)}</div>
+      </div>
+      <button class="icon-btn speak-word" data-hanzi="${h(word.hanzi)}">🔊</button>
+    </div>`;
+}
+function bindResult(){
+  const retryBtn = document.getElementById("retryBtn");
+  if(retryBtn) retryBtn.addEventListener("click", startQuiz);
+  const backBtn = document.getElementById("backSetupBtn");
+  if(backBtn) backBtn.addEventListener("click", ()=>{ state.screen = "setup"; render(); });
+  app.querySelectorAll(".speak-word").forEach(btn=>{
+    btn.addEventListener("click", ()=>speak(btn.getAttribute("data-hanzi")));
+  });
+}
+
+/* ---------------- Notes screen ---------------- */
+function renderNotes(){
+  const wrongWords = WORDS.filter(w=>wrongCountOf(w.id) > 0)
+    .sort((a,b)=>wrongCountOf(b.id) - wrongCountOf(a.id));
+  const passedWords = WORDS.filter(w=>(wordStats[w.id] && wordStats[w.id].passed > 0))
+    .sort((a,b)=>((wordStats[b.id]&&wordStats[b.id].passed)||0) - ((wordStats[a.id]&&wordStats[a.id].passed)||0));
+  const list = state.notesTab === "wrong" ? wrongWords : passedWords;
+  return `
+  <div class="card">
+    <div class="notes-tabs">
+      <button class="tab ${state.notesTab==="wrong"?"active":""}" data-notes-tab="wrong">오답노트 (${wrongWords.length})</button>
+      <button class="tab ${state.notesTab==="passed"?"active":""}" data-notes-tab="passed">패스노트 (${passedWords.length})</button>
+    </div>
+    <div class="word-list">
+      ${list.length ? list.map(w=>renderNoteItem(w)).join("") : `<div class="empty">아직 기록이 없습니다.</div>`}
+    </div>
+  </div>`;
+}
+function renderNoteItem(w){
+  const s = wordStats[w.id] || {wrong:0, correct:0, passed:0};
+  return `
+    <div class="word-item">
+      <div class="word-main">
+        <span class="badge">${h(w.group)}</span>
+        <div class="word-hanzi">${h(w.hanzi)} <span class="word-pinyin">${h(w.pinyin)}</span></div>
+        <div class="word-meaning">${h(w.meaning)} · 오답 ${s.wrong||0} / 패스 ${s.passed||0}</div>
+      </div>
+      <div class="btn-row">
+        <button class="icon-btn star-toggle ${w.starred?"starred":""}" data-id="${w.id}">${w.starred?"★":"☆"}</button>
+        <button class="icon-btn speak-word" data-hanzi="${h(w.hanzi)}">🔊</button>
+      </div>
+    </div>`;
+}
+function bindNotes(){
+  app.querySelectorAll("[data-notes-tab]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      state.notesTab = btn.getAttribute("data-notes-tab");
+      render();
+    });
+  });
+  app.querySelectorAll(".speak-word").forEach(btn=>{
+    btn.addEventListener("click", ()=>speak(btn.getAttribute("data-hanzi")));
+  });
+  app.querySelectorAll(".star-toggle").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      await toggleStar(btn.getAttribute("data-id"));
+      render();
+    });
+  });
+}
+
+/* ---------------- Manage screen ---------------- */
+function renderManage(){
+  const q = state.manage.query.trim().toLowerCase();
+  const filtered = WORDS.filter(w=>{
+    if(!q) return true;
+    return w.hanzi.toLowerCase().includes(q) || w.pinyin.toLowerCase().includes(q) || w.meaning.toLowerCase().includes(q);
+  });
+  return `
+  <div class="card">
+    <div class="row-between">
+      <h3>단어장 관리</h3>
+      <button class="btn btn-primary" id="toggleAdd">${state.manage.showAdd ? "닫기" : "+ 단어 추가"}</button>
+    </div>
+    <input type="text" id="searchInput" placeholder="한자/병음/뜻 검색" value="${h(state.manage.query)}">
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn" id="exportBtn">백업 내보내기</button>
+      <button class="btn" id="importBtn">백업 가져오기</button>
+      <input type="file" id="importFile" accept="application/json" class="file-hidden">
+    </div>
+  </div>
+  ${state.manage.showAdd ? renderWordForm(null) : ""}
+  ${state.manage.editingId ? renderWordForm(WORDS.find(w=>w.id===state.manage.editingId)) : ""}
+  <div class="card">
+    <div class="word-list" id="manageList">
+      ${filtered.length ? filtered.map(w=>renderManageItem(w)).join("") : `<div class="empty">검색 결과가 없습니다.</div>`}
+    </div>
+  </div>`;
+}
+function renderWordForm(word){
+  const isEdit = !!word;
+  return `
+  <div class="card" id="wordForm">
+    <h3>${isEdit ? "단어 수정" : "새 단어 추가"}</h3>
+    <label class="field">카테고리</label>
+    <select id="fCategory">
+      ${GROUP_ORDER.map(g=>`<option value="${h(g)}" ${word && word.category===g?"selected":""}>${h(g)}</option>`).join("")}
+    </select>
+    <label class="field">한자</label>
+    <input type="text" id="fHanzi" value="${word ? h(word.hanzi) : ""}">
+    <label class="field">병음</label>
+    <input type="text" id="fPinyin" value="${word ? h(word.pinyin) : ""}">
+    <label class="field">뜻</label>
+    <input type="text" id="fMeaning" value="${word ? h(word.meaning) : ""}">
+    <label class="field">메모 (선택)</label>
+    <input type="text" id="fNote" value="${word ? h(word.note || "") : ""}">
+    <label class="check-row"><input type="checkbox" id="fStarred" ${word && word.starred ? "checked" : ""}> 즐겨찾기</label>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn btn-primary" id="saveWordBtn">저장</button>
+      <button class="btn btn-ghost" id="cancelWordBtn">취소</button>
+    </div>
+  </div>`;
+}
+function renderManageItem(w){
+  return `
+    <div class="word-item">
+      <div class="word-main">
+        <span class="badge">${h(w.group)}</span>
+        <div class="word-hanzi">${h(w.hanzi)} <span class="word-pinyin">${h(w.pinyin)}</span></div>
+        <div class="word-meaning">${h(w.meaning)}</div>
+      </div>
+      <div class="btn-row">
+        <button class="icon-btn star-toggle ${w.starred?"starred":""}" data-id="${w.id}">${w.starred?"★":"☆"}</button>
+        <button class="icon-btn speak-word" data-hanzi="${h(w.hanzi)}">🔊</button>
+        <button class="icon-btn edit-word" data-id="${w.id}">✏️</button>
+        <button class="icon-btn delete-word" data-id="${w.id}">🗑️</button>
+      </div>
+    </div>`;
+}
+function bindManage(){
+  const searchInput = document.getElementById("searchInput");
+  if(searchInput){
+    searchInput.addEventListener("input", e=>{
+      state.manage.query = e.target.value;
+      const q = state.manage.query.trim().toLowerCase();
+      const list = document.getElementById("manageList");
+      if(!list) return;
+      list.querySelectorAll(".word-item").forEach(item=>{
+        const text = item.textContent.toLowerCase();
+        item.style.display = (!q || text.includes(q)) ? "" : "none";
+      });
+    });
+  }
+  const toggleAdd = document.getElementById("toggleAdd");
+  if(toggleAdd) toggleAdd.addEventListener("click", ()=>{
+    state.manage.showAdd = !state.manage.showAdd;
+    state.manage.editingId = null;
+    render();
+  });
+  const exportBtn = document.getElementById("exportBtn");
+  if(exportBtn) exportBtn.addEventListener("click", ()=>{
+    downloadJSON(`xiaozhang-chinese-backup-${new Date().toISOString().slice(0,10)}.json`, {
+      words: WORDS, stats: wordStats, exportedAt: new Date().toISOString()
+    });
+  });
+  const importBtn = document.getElementById("importBtn");
+  const importFile = document.getElementById("importFile");
+  if(importBtn && importFile){
+    importBtn.addEventListener("click", ()=>importFile.click());
+    importFile.addEventListener("change", async e=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      try{
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if(!Array.isArray(data.words)) throw new Error("invalid backup file");
+        if(!confirm(`단어 ${data.words.length}개를 가져옵니다. 같은 ID의 단어는 덮어씁니다. 계속할까요?`)) return;
+        const byId = new Map(WORDS.map(w=>[w.id, w]));
+        data.words.forEach(w=>byId.set(w.id, w));
+        WORDS = Array.from(byId.values());
+        if(data.stats) Object.assign(wordStats, data.stats);
+        await persistWordList();
+        await persistStats();
+        render();
+      } catch(err){
+        alert("가져오기 실패: 올바른 백업 파일이 아닙니다.");
+      }
+      importFile.value = "";
+    });
+  }
+  const saveWordBtn = document.getElementById("saveWordBtn");
+  if(saveWordBtn){
+    saveWordBtn.addEventListener("click", async ()=>{
+      const category = document.getElementById("fCategory").value;
+      const hanzi = document.getElementById("fHanzi").value.trim();
+      const pinyin = document.getElementById("fPinyin").value.trim();
+      const meaning = document.getElementById("fMeaning").value.trim();
+      const note = document.getElementById("fNote").value.trim();
+      const starred = document.getElementById("fStarred").checked;
+      if(!hanzi || !pinyin || !meaning){
+        alert("한자, 병음, 뜻은 필수입니다.");
+        return;
+      }
+      if(state.manage.editingId){
+        await updateWord(state.manage.editingId, {category, hanzi, pinyin, meaning, note, starred});
+        state.manage.editingId = null;
+      } else {
+        await addWord({category, hanzi, pinyin, meaning, note, starred});
+        state.manage.showAdd = false;
+      }
+      render();
+    });
+  }
+  const cancelWordBtn = document.getElementById("cancelWordBtn");
+  if(cancelWordBtn) cancelWordBtn.addEventListener("click", ()=>{
+    state.manage.showAdd = false;
+    state.manage.editingId = null;
+    render();
+  });
+  app.querySelectorAll(".speak-word").forEach(btn=>{
+    btn.addEventListener("click", ()=>speak(btn.getAttribute("data-hanzi")));
+  });
+  app.querySelectorAll(".star-toggle").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      await toggleStar(btn.getAttribute("data-id"));
+      render();
+    });
+  });
+  app.querySelectorAll(".edit-word").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      state.manage.editingId = btn.getAttribute("data-id");
+      state.manage.showAdd = false;
+      render();
+    });
+  });
+  app.querySelectorAll(".delete-word").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const id = btn.getAttribute("data-id");
+      const w = WORDS.find(x=>x.id===id);
+      if(!w) return;
+      if(!confirm(`"${w.hanzi}" 단어를 삭제할까요?`)) return;
+      await deleteWord(id);
+      render();
+    });
+  });
+}
+
+/* ---------------- Sentence practice screen ---------------- */
+function pickSentenceWord(){
+  const candidates = WORDS.length ? WORDS : INITIAL_WORDS;
+  const idx = Math.floor(Math.random() * candidates.length);
+  state.sentence.word = candidates[idx];
+  state.sentence.text = "";
+  state.sentence.result = null;
+}
+function renderSentence(){
+  if(!state.sentence.word) pickSentenceWord();
+  const word = state.sentence.word;
+  const result = state.sentence.result;
+  return `
+  <div class="card">
+    <h3>문장 만들기</h3>
+    <small class="hint">서버 없이 동작하는 규칙 기반 채점입니다: 단어 포함 여부, 문장 길이, 문장부호, 중국어 작성 여부를 확인합니다. 문법까지 검사하지는 않습니다.</small>
+    <div class="quiz-meaning" style="margin-top:14px;">${h(word.hanzi)} <span class="word-pinyin">(${h(word.pinyin)})</span></div>
+    <div class="quiz-hint">${h(word.meaning)} — 이 단어를 사용해 중국어 문장을 만들어보세요</div>
+    <textarea id="sentenceInput" placeholder="예: 我今天很高兴。">${h(state.sentence.text)}</textarea>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn" id="speakWordBtn">🔊 단어 발음</button>
+      <button class="btn" id="anotherWordBtn">다른 단어</button>
+      <button class="btn btn-primary" id="gradeBtn">채점하기</button>
+    </div>
+    ${result ? `
+      <div class="feedback ${result.pass ? "correct" : "wrong"}">
+        ${result.pass ? "잘 작성했습니다!" : "조금 더 다듬어보세요"}
+        <ul class="checklist">
+          ${result.items.map(i=>`<li class="${i.ok?"ok":"no"}">${i.ok?"✓":"✗"} ${h(i.label)}</li>`).join("")}
+        </ul>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="speakSentenceBtn">🔊 내 문장 듣기</button>
+      </div>
+    ` : ""}
+  </div>`;
+}
+function bindSentence(){
+  const word = state.sentence.word;
+  const input = document.getElementById("sentenceInput");
+  if(input){
+    input.addEventListener("input", e=>{ state.sentence.text = e.target.value; });
+  }
+  const speakWordBtn = document.getElementById("speakWordBtn");
+  if(speakWordBtn) speakWordBtn.addEventListener("click", ()=>speak(word.hanzi));
+  const anotherWordBtn = document.getElementById("anotherWordBtn");
+  if(anotherWordBtn) anotherWordBtn.addEventListener("click", ()=>{ pickSentenceWord(); render(); });
+  const gradeBtn = document.getElementById("gradeBtn");
+  if(gradeBtn) gradeBtn.addEventListener("click", ()=>{
+    state.sentence.result = gradeSentence(word, state.sentence.text);
+    render();
+  });
+  const speakSentenceBtn = document.getElementById("speakSentenceBtn");
+  if(speakSentenceBtn) speakSentenceBtn.addEventListener("click", ()=>speak(state.sentence.text));
+}
+
+/* ---------------- Init ---------------- */
+(async function init(){
+  await loadWordList();
+  await loadStats();
+  render();
+})();
+</script>
+</body>
+</html>
