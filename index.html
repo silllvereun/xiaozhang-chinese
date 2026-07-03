@@ -803,13 +803,43 @@ function gradeSentence(word, text){
 }
 
 /* ---------------- TTS ---------------- */
-function speak(text){
-  if(!("speechSynthesis" in window)) return;
+let voicesPromise = null;
+function loadVoices(){
+  if(voicesPromise) return voicesPromise;
+  voicesPromise = new Promise(resolve=>{
+    let voices = window.speechSynthesis.getVoices();
+    if(voices.length){ resolve(voices); return; }
+    const handler = () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", handler);
+      resolve(window.speechSynthesis.getVoices());
+    };
+    window.speechSynthesis.addEventListener("voiceschanged", handler);
+    setTimeout(()=>{
+      window.speechSynthesis.removeEventListener("voiceschanged", handler);
+      resolve(window.speechSynthesis.getVoices());
+    }, 1000);
+  });
+  return voicesPromise;
+}
+let zhVoiceMissingWarned = false;
+async function speak(text){
+  if(!("speechSynthesis" in window) || !text) return;
   window.speechSynthesis.cancel();
+  const voices = await loadVoices();
+  const zhVoice = voices.find(v=>/^zh/i.test(v.lang));
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = "zh-CN";
+  if(zhVoice){
+    u.voice = zhVoice;
+    u.lang = zhVoice.lang;
+  } else {
+    u.lang = "zh-CN";
+  }
   u.rate = 0.9;
   window.speechSynthesis.speak(u);
+  if(!zhVoice && !zhVoiceMissingWarned){
+    zhVoiceMissingWarned = true;
+    alert("이 기기에 설치된 중국어 음성이 없어서 발음이 정확하게 재생되지 않을 수 있습니다.\nWindows: 설정 > 시간 및 언어 > 언어 및 지역에서 중국어(简体中文)를 추가하고 음성 팩을 설치해보세요.");
+  }
 }
 
 /* ---------------- Misc helpers ---------------- */
