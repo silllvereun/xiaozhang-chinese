@@ -197,6 +197,72 @@
   a.hidden-link{display:none;}
   small.hint{color:var(--sub);font-size:12px;}
   .top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+  .fab{
+    position:fixed;
+    right:20px;
+    bottom:24px;
+    width:56px;
+    height:56px;
+    border-radius:50%;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    font-size:26px;
+    line-height:1;
+    box-shadow:0 4px 14px rgba(0,0,0,0.25);
+    cursor:pointer;
+    z-index:50;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .sheet-backdrop{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.4);
+    z-index:60;
+  }
+  .sheet{
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:0;
+    max-width:720px;
+    margin:0 auto;
+    background:#fff;
+    border-radius:16px 16px 0 0;
+    max-height:85vh;
+    overflow-y:auto;
+    z-index:61;
+    padding:18px;
+    animation:sheetUp 0.22s ease-out;
+  }
+  @keyframes sheetUp{
+    from{ transform:translateY(100%); }
+    to{ transform:translateY(0); }
+  }
+  .chip-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}
+  .chip-sm{
+    padding:5px 10px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    font-size:12px;
+    cursor:pointer;
+    color:var(--sub);
+    background:#fff;
+  }
+  .chip-sm.on{
+    border-color:var(--accent);
+    background:#fdece7;
+    color:var(--accent);
+  }
+  .view-toggle{display:flex;gap:6px;margin:8px 0;}
+  .carousel-card{
+    text-align:center;
+    padding:28px 18px;
+  }
+  .carousel-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;}
+  .carousel-count{color:var(--sub);font-size:13px;}
 </style>
 </head>
 <body>
@@ -616,8 +682,7 @@ function buildInitialWords(){
       n += 1;
       words.push({
         id: "w" + String(n).padStart(3,"0"),
-        category: group,
-        group: group,
+        categories: [group],
         hanzi: hanzi,
         pinyin: pinyin,
         meaning: meaning,
@@ -667,7 +732,7 @@ async function loadWordList(){
     const { data, error } = await supabaseClient.from("words").select("*").order("id");
     if(error) throw error;
     if(data && data.length){
-      WORDS = data.map(r=>({id:r.id, category:r.category, group:r.category, hanzi:r.hanzi, pinyin:r.pinyin, meaning:r.meaning, note:r.note||""}));
+      WORDS = data.map(r=>({id:r.id, categories: (r.categories && r.categories.length) ? r.categories : ["미분류"], hanzi:r.hanzi, pinyin:r.pinyin, meaning:r.meaning, note:r.note||""}));
       await dbSet("wordListCache", WORDS);
       return;
     }
@@ -684,22 +749,21 @@ async function loadStats(){
 
 async function addWord(data){
   const id = "w" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-  const row = {id, category: data.category, hanzi: data.hanzi, pinyin: data.pinyin, meaning: data.meaning, note: data.note || ""};
+  const row = {id, categories: data.categories, hanzi: data.hanzi, pinyin: data.pinyin, meaning: data.meaning, note: data.note || ""};
   const { error } = await supabaseClient.from("words").insert(row);
   if(error){ alert("단어 추가 실패: " + error.message); return false; }
-  WORDS.push({...row, group: row.category});
+  WORDS.push({...row});
   await dbSet("wordListCache", WORDS);
   return true;
 }
 async function updateWord(id, patch){
   const { error } = await supabaseClient.from("words").update({
-    category: patch.category, hanzi: patch.hanzi, pinyin: patch.pinyin, meaning: patch.meaning, note: patch.note
+    categories: patch.categories, hanzi: patch.hanzi, pinyin: patch.pinyin, meaning: patch.meaning, note: patch.note
   }).eq("id", id);
   if(error){ alert("수정 실패 (로그인이 필요합니다): " + error.message); return false; }
   const w = WORDS.find(x=>x.id===id);
   if(w){
     Object.assign(w, patch);
-    w.group = patch.category;
   }
   await dbSet("wordListCache", WORDS);
   return true;
@@ -794,7 +858,7 @@ function weightOf(id){
 }
 function pool(){
   return WORDS.filter(w=>{
-    if(!state.selectedGroups.has(w.group)) return false;
+    if(!w.categories.some(c=>state.selectedGroups.has(c))) return false;
     if(state.starredOnly && !isStarred(w.id)) return false;
     if(state.reviewMode && wrongCountOf(w.id) === 0) return false;
     return true;
@@ -916,6 +980,9 @@ async function speak(text){
 function h(s){
   return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+function renderBadges(categories){
+  return (categories || []).map(c=>`<span class="badge">${h(c)}</span>`).join("");
+}
 function downloadJSON(filename, obj){
   const blob = new Blob([JSON.stringify(obj, null, 2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
@@ -944,7 +1011,16 @@ const state = {
   input: "",
   quizResults: [],
   notesTab: "wrong",
-  manage: {query: "", editingId: null, showAdd: false},
+  manage: {
+    query: "",
+    editingId: null,
+    showAdd: false,
+    formCategories: new Set(),
+    filterCategories: new Set(),
+    sortBy: "default",
+    viewMode: "list",
+    carouselIndex: 0
+  },
   sentence: {word: null, text: "", result: null}
 };
 
@@ -1118,7 +1194,7 @@ function renderQuiz(){
   if(!word){ state.screen = "result"; return renderResult(); }
   return `
   <div class="card">
-    <div class="quiz-progress">${state.quizIndex + 1} / ${state.quizWords.length} · ${h(word.group)}</div>
+    <div class="quiz-progress">${state.quizIndex + 1} / ${state.quizWords.length} · ${h(word.categories.join(", "))}</div>
     <div class="quiz-meaning">${h(word.meaning)}</div>
     <div class="quiz-hint">병음 또는 한자로 입력하세요</div>
     <input type="text" id="answerInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="답 입력..." value="${h(state.input)}" ${state.answered?"disabled":""}>
@@ -1238,7 +1314,7 @@ function renderResultWordItem(word){
   return `
     <div class="word-item">
       <div class="word-main">
-        <span class="badge">${h(word.group)}</span>
+        ${renderBadges(word.categories)}
         <div class="word-hanzi">${h(word.hanzi)} <span class="word-pinyin">${h(word.pinyin)}</span></div>
         <div class="word-meaning">${h(word.meaning)}</div>
       </div>
@@ -1278,7 +1354,7 @@ function renderNoteItem(w){
   return `
     <div class="word-item">
       <div class="word-main">
-        <span class="badge">${h(w.group)}</span>
+        ${renderBadges(w.categories)}
         <div class="word-hanzi">${h(w.hanzi)} <span class="word-pinyin">${h(w.pinyin)}</span></div>
         <div class="word-meaning">${h(w.meaning)} · 오답 ${s.wrong||0} / 패스 ${s.passed||0}</div>
       </div>
@@ -1307,19 +1383,41 @@ function bindNotes(){
 }
 
 /* ---------------- Manage screen ---------------- */
-function renderManage(){
+function getManageList(){
   const q = state.manage.query.trim().toLowerCase();
-  const filtered = WORDS.filter(w=>{
-    if(!q) return true;
-    return w.hanzi.toLowerCase().includes(q) || w.pinyin.toLowerCase().includes(q) || w.meaning.toLowerCase().includes(q);
+  let list = WORDS.filter(w=>{
+    if(q && !(w.hanzi.toLowerCase().includes(q) || w.pinyin.toLowerCase().includes(q) || w.meaning.toLowerCase().includes(q))) return false;
+    if(state.manage.filterCategories.size && !w.categories.some(c=>state.manage.filterCategories.has(c))) return false;
+    return true;
   });
+  const sortBy = state.manage.sortBy;
+  if(sortBy === "hanzi") list = list.slice().sort((a,b)=>a.hanzi.localeCompare(b.hanzi, "zh-Hans-CN"));
+  else if(sortBy === "pinyin") list = list.slice().sort((a,b)=>normalize(a.pinyin).localeCompare(normalize(b.pinyin)));
+  else if(sortBy === "category") list = list.slice().sort((a,b)=>(a.categories[0]||"").localeCompare(b.categories[0]||"", "ko"));
+  return list;
+}
+function renderManage(){
+  const list = getManageList();
   return `
   <div class="card">
-    <div class="row-between">
-      <h3>단어장 관리</h3>
-      <button class="btn btn-primary" id="toggleAdd">${state.manage.showAdd ? "닫기" : "+ 단어 추가"}</button>
-    </div>
+    <h3>단어장 관리</h3>
     <input type="text" id="searchInput" placeholder="한자/병음/뜻 검색" value="${h(state.manage.query)}">
+    <label class="field">카테고리 필터 (선택 안 하면 전체 표시)</label>
+    <div class="chip-row">
+      ${GROUP_ORDER.map(g=>`<div class="chip-sm filter-chip ${state.manage.filterCategories.has(g)?"on":""}" data-cat="${h(g)}">${h(g)}</div>`).join("")}
+    </div>
+    <div class="row-between" style="margin-top:10px;">
+      <select id="sortBySelect" style="max-width:160px;">
+        <option value="default" ${state.manage.sortBy==="default"?"selected":""}>등록순</option>
+        <option value="hanzi" ${state.manage.sortBy==="hanzi"?"selected":""}>한자순</option>
+        <option value="pinyin" ${state.manage.sortBy==="pinyin"?"selected":""}>병음순</option>
+        <option value="category" ${state.manage.sortBy==="category"?"selected":""}>카테고리순</option>
+      </select>
+      <div class="view-toggle">
+        <button class="tab ${state.manage.viewMode==="list"?"active":""}" id="viewList">☰ 목록</button>
+        <button class="tab ${state.manage.viewMode==="carousel"?"active":""}" id="viewCarousel">▤ 카드</button>
+      </div>
+    </div>
     <div class="btn-row" style="margin-top:12px;">
       <button class="btn" id="exportBtn">백업 내보내기</button>
       <button class="btn" id="importBtn">백업 가져오기</button>
@@ -1328,21 +1426,50 @@ function renderManage(){
   </div>
   ${state.manage.showAdd ? renderWordForm(null) : ""}
   ${state.manage.editingId ? renderWordForm(WORDS.find(w=>w.id===state.manage.editingId)) : ""}
+  ${state.manage.viewMode === "carousel" ? renderManageCarousel(list) : `
   <div class="card">
     <div class="word-list" id="manageList">
-      ${filtered.length ? filtered.map(w=>renderManageItem(w)).join("") : `<div class="empty">검색 결과가 없습니다.</div>`}
+      ${list.length ? list.map(w=>renderManageItem(w)).join("") : `<div class="empty">검색 결과가 없습니다.</div>`}
+    </div>
+  </div>`}
+  <button class="fab" id="addWordFab" title="단어 추가">+</button>
+  `;
+}
+function renderManageCarousel(list){
+  if(!list.length) return `<div class="card"><div class="empty">표시할 단어가 없습니다.</div></div>`;
+  const idx = Math.min(state.manage.carouselIndex, list.length - 1);
+  const w = list[idx];
+  return `
+  <div class="card">
+    <div class="carousel-card">
+      ${renderBadges(w.categories)}
+      <div class="word-hanzi" style="font-size:32px;margin-top:10px;">${h(w.hanzi)}</div>
+      <div class="word-pinyin" style="font-size:16px;margin-top:4px;">${h(w.pinyin)}</div>
+      <div class="word-meaning" style="font-size:16px;margin-top:8px;">${h(w.meaning)}</div>
+      <div class="btn-row" style="justify-content:center;margin-top:14px;">
+        <button class="icon-btn star-toggle ${isStarred(w.id)?"starred":""}" data-id="${w.id}">${isStarred(w.id)?"★":"☆"}</button>
+        <button class="icon-btn speak-word" data-hanzi="${h(w.hanzi)}">🔊</button>
+        <button class="icon-btn edit-word" data-id="${w.id}">✏️</button>
+        <button class="icon-btn delete-word" data-id="${w.id}">🗑️</button>
+      </div>
+    </div>
+    <div class="carousel-nav">
+      <button class="btn" id="carouselPrev" ${idx<=0?"disabled":""}>← 이전</button>
+      <span class="carousel-count">${idx+1} / ${list.length}</span>
+      <button class="btn" id="carouselNext" ${idx>=list.length-1?"disabled":""}>다음 →</button>
     </div>
   </div>`;
 }
 function renderWordForm(word){
   const isEdit = !!word;
   return `
-  <div class="card" id="wordForm">
+  <div class="sheet-backdrop" id="sheetBackdrop"></div>
+  <div class="sheet" id="wordForm">
     <h3>${isEdit ? "단어 수정" : "새 단어 추가"}</h3>
-    <label class="field">카테고리</label>
-    <select id="fCategory">
-      ${GROUP_ORDER.map(g=>`<option value="${h(g)}" ${word && word.category===g?"selected":""}>${h(g)}</option>`).join("")}
-    </select>
+    <label class="field">카테고리 (여러 개 선택 가능)</label>
+    <div class="chip-row">
+      ${GROUP_ORDER.map(g=>`<div class="chip-sm form-cat-chip ${state.manage.formCategories.has(g)?"on":""}" data-cat="${h(g)}">${h(g)}</div>`).join("")}
+    </div>
     <label class="field">한자</label>
     <input type="text" id="fHanzi" value="${word ? h(word.hanzi) : ""}">
     <label class="field">병음</label>
@@ -1361,7 +1488,7 @@ function renderManageItem(w){
   return `
     <div class="word-item">
       <div class="word-main">
-        <span class="badge">${h(w.group)}</span>
+        ${renderBadges(w.categories)}
         <div class="word-hanzi">${h(w.hanzi)} <span class="word-pinyin">${h(w.pinyin)}</span></div>
         <div class="word-meaning">${h(w.meaning)}</div>
       </div>
@@ -1374,25 +1501,52 @@ function renderManageItem(w){
     </div>`;
 }
 function bindManage(){
+  const list = getManageList();
+
   const searchInput = document.getElementById("searchInput");
   if(searchInput){
     searchInput.addEventListener("input", e=>{
       state.manage.query = e.target.value;
+      if(state.manage.viewMode === "carousel"){ render(); return; }
       const q = state.manage.query.trim().toLowerCase();
-      const list = document.getElementById("manageList");
-      if(!list) return;
-      list.querySelectorAll(".word-item").forEach(item=>{
+      const listEl = document.getElementById("manageList");
+      if(!listEl) return;
+      listEl.querySelectorAll(".word-item").forEach(item=>{
         const text = item.textContent.toLowerCase();
         item.style.display = (!q || text.includes(q)) ? "" : "none";
       });
     });
   }
-  const toggleAdd = document.getElementById("toggleAdd");
-  if(toggleAdd) toggleAdd.addEventListener("click", ()=>{
-    state.manage.showAdd = !state.manage.showAdd;
-    state.manage.editingId = null;
+
+  app.querySelectorAll(".filter-chip").forEach(chip=>{
+    chip.addEventListener("click", ()=>{
+      const cat = chip.getAttribute("data-cat");
+      if(state.manage.filterCategories.has(cat)) state.manage.filterCategories.delete(cat);
+      else state.manage.filterCategories.add(cat);
+      state.manage.carouselIndex = 0;
+      render();
+    });
+  });
+
+  const sortBySelect = document.getElementById("sortBySelect");
+  if(sortBySelect) sortBySelect.addEventListener("change", e=>{
+    state.manage.sortBy = e.target.value;
     render();
   });
+
+  const viewList = document.getElementById("viewList");
+  if(viewList) viewList.addEventListener("click", ()=>{ state.manage.viewMode = "list"; render(); });
+  const viewCarousel = document.getElementById("viewCarousel");
+  if(viewCarousel) viewCarousel.addEventListener("click", ()=>{ state.manage.viewMode = "carousel"; state.manage.carouselIndex = 0; render(); });
+
+  const addWordFab = document.getElementById("addWordFab");
+  if(addWordFab) addWordFab.addEventListener("click", ()=>{
+    state.manage.showAdd = true;
+    state.manage.editingId = null;
+    state.manage.formCategories = new Set();
+    render();
+  });
+
   const exportBtn = document.getElementById("exportBtn");
   if(exportBtn) exportBtn.addEventListener("click", ()=>{
     downloadJSON(`xiaozhang-chinese-backup-${new Date().toISOString().slice(0,10)}.json`, {
@@ -1411,7 +1565,7 @@ function bindManage(){
         const data = JSON.parse(text);
         if(!Array.isArray(data.words)) throw new Error("invalid backup file");
         if(!confirm(`단어 ${data.words.length}개를 서버 단어장에 업로드합니다. 같은 ID의 기존 단어는 덮어씁니다(로그인 필요). 계속할까요?`)) return;
-        const rows = data.words.map(w=>({id:w.id, category:w.category, hanzi:w.hanzi, pinyin:w.pinyin, meaning:w.meaning, note:w.note||""}));
+        const rows = data.words.map(w=>({id:w.id, categories: w.categories || (w.category ? [w.category] : []), hanzi:w.hanzi, pinyin:w.pinyin, meaning:w.meaning, note:w.note||""}));
         const { error } = await supabaseClient.from("words").upsert(rows, {onConflict:"id"});
         if(error) throw error;
         if(data.stats) Object.assign(wordStats, data.stats);
@@ -1424,23 +1578,48 @@ function bindManage(){
       importFile.value = "";
     });
   }
+
+  const sheetBackdrop = document.getElementById("sheetBackdrop");
+  if(sheetBackdrop) sheetBackdrop.addEventListener("click", ()=>{
+    state.manage.showAdd = false;
+    state.manage.editingId = null;
+    render();
+  });
+
+  app.querySelectorAll(".form-cat-chip").forEach(chip=>{
+    chip.addEventListener("click", ()=>{
+      const cat = chip.getAttribute("data-cat");
+      if(state.manage.formCategories.has(cat)){
+        state.manage.formCategories.delete(cat);
+        chip.classList.remove("on");
+      } else {
+        state.manage.formCategories.add(cat);
+        chip.classList.add("on");
+      }
+    });
+  });
+
   const saveWordBtn = document.getElementById("saveWordBtn");
   if(saveWordBtn){
     saveWordBtn.addEventListener("click", async ()=>{
-      const category = document.getElementById("fCategory").value;
+      const categories = Array.from(state.manage.formCategories);
       const hanzi = document.getElementById("fHanzi").value.trim();
       const pinyin = document.getElementById("fPinyin").value.trim();
       const meaning = document.getElementById("fMeaning").value.trim();
       const note = document.getElementById("fNote").value.trim();
+      if(!categories.length){
+        alert("카테고리를 하나 이상 선택해주세요.");
+        return;
+      }
       if(!hanzi || !pinyin || !meaning){
         alert("한자, 병음, 뜻은 필수입니다.");
         return;
       }
       if(state.manage.editingId){
-        const ok = await updateWord(state.manage.editingId, {category, hanzi, pinyin, meaning, note});
+        const ok = await updateWord(state.manage.editingId, {categories, hanzi, pinyin, meaning, note});
         if(ok) state.manage.editingId = null;
       } else {
-        const ok = await addWord({category, hanzi, pinyin, meaning, note});
+        const ok = await addWord({categories, hanzi, pinyin, meaning, note});
         if(ok) state.manage.showAdd = false;
       }
       render();
@@ -1463,8 +1642,11 @@ function bindManage(){
   });
   app.querySelectorAll(".edit-word").forEach(btn=>{
     btn.addEventListener("click", ()=>{
-      state.manage.editingId = btn.getAttribute("data-id");
+      const id = btn.getAttribute("data-id");
+      const w = WORDS.find(x=>x.id===id);
+      state.manage.editingId = id;
       state.manage.showAdd = false;
+      state.manage.formCategories = new Set(w ? w.categories : []);
       render();
     });
   });
@@ -1478,6 +1660,32 @@ function bindManage(){
       render();
     });
   });
+
+  if(state.manage.viewMode === "carousel"){
+    const prevBtn = document.getElementById("carouselPrev");
+    const nextBtn = document.getElementById("carouselNext");
+    if(prevBtn) prevBtn.addEventListener("click", ()=>{
+      state.manage.carouselIndex = Math.max(0, state.manage.carouselIndex - 1);
+      render();
+    });
+    if(nextBtn) nextBtn.addEventListener("click", ()=>{
+      state.manage.carouselIndex = Math.min(list.length - 1, state.manage.carouselIndex + 1);
+      render();
+    });
+    const card = app.querySelector(".carousel-card");
+    if(card){
+      let touchStartX = null;
+      card.addEventListener("touchstart", e=>{ touchStartX = e.touches[0].clientX; });
+      card.addEventListener("touchend", e=>{
+        if(touchStartX === null) return;
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        if(dx > 40) state.manage.carouselIndex = Math.max(0, state.manage.carouselIndex - 1);
+        else if(dx < -40) state.manage.carouselIndex = Math.min(list.length - 1, state.manage.carouselIndex + 1);
+        else return;
+        render();
+      });
+    }
+  }
 }
 
 /* ---------------- Sentence practice screen ---------------- */
