@@ -632,7 +632,7 @@ const INITIAL_WORDS = buildInitialWords();
 /* ---------------- Supabase client ---------------- */
 const SUPABASE_URL = "https://csaracwmfpdyxwyqiois.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzYXJhY3dtZnBkeXh3eXFpb2lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNDI2NTQsImV4cCI6MjA5ODcxODY1NH0.XDf6GehKKuClKPDCV5Z8_XqNiEOAyqHGZdi2ovIxtIM";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ---------------- Local cache (localStorage) ---------------- */
 async function dbGet(key){
@@ -664,7 +664,7 @@ function persistStats(){
 
 async function loadWordList(){
   try{
-    const { data, error } = await supabase.from("words").select("*").order("id");
+    const { data, error } = await supabaseClient.from("words").select("*").order("id");
     if(error) throw error;
     if(data && data.length){
       WORDS = data.map(r=>({id:r.id, category:r.category, group:r.category, hanzi:r.hanzi, pinyin:r.pinyin, meaning:r.meaning, note:r.note||""}));
@@ -685,14 +685,14 @@ async function loadStats(){
 async function addWord(data){
   const id = "w" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
   const row = {id, category: data.category, hanzi: data.hanzi, pinyin: data.pinyin, meaning: data.meaning, note: data.note || ""};
-  const { error } = await supabase.from("words").insert(row);
+  const { error } = await supabaseClient.from("words").insert(row);
   if(error){ alert("단어 추가 실패: " + error.message); return false; }
   WORDS.push({...row, group: row.category});
   await dbSet("wordListCache", WORDS);
   return true;
 }
 async function updateWord(id, patch){
-  const { error } = await supabase.from("words").update({
+  const { error } = await supabaseClient.from("words").update({
     category: patch.category, hanzi: patch.hanzi, pinyin: patch.pinyin, meaning: patch.meaning, note: patch.note
   }).eq("id", id);
   if(error){ alert("수정 실패 (로그인이 필요합니다): " + error.message); return false; }
@@ -705,7 +705,7 @@ async function updateWord(id, patch){
   return true;
 }
 async function deleteWord(id){
-  const { error } = await supabase.from("words").delete().eq("id", id);
+  const { error } = await supabaseClient.from("words").delete().eq("id", id);
   if(error){ alert("삭제 실패 (로그인이 필요합니다): " + error.message); return false; }
   WORDS = WORDS.filter(x=>x.id!==id);
   delete wordStats[id];
@@ -725,10 +725,10 @@ function isStarred(id){
 
 /* ---------------- Auth (email magic link) ---------------- */
 async function initAuth(){
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   currentUser = session ? session.user : null;
   if(currentUser) await syncProgressAfterLogin();
-  supabase.auth.onAuthStateChange(async (event, session)=>{
+  supabaseClient.auth.onAuthStateChange(async (event, session)=>{
     const wasLoggedIn = !!currentUser;
     currentUser = session ? session.user : null;
     if(currentUser && !wasLoggedIn){
@@ -739,12 +739,12 @@ async function initAuth(){
 }
 async function sendMagicLink(email){
   const redirectTo = window.location.origin + window.location.pathname;
-  const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
+  const { error } = await supabaseClient.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
   if(error){ alert("로그인 링크 전송 실패: " + error.message); return false; }
   return true;
 }
 async function signOut(){
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   currentUser = null;
   render();
 }
@@ -761,12 +761,12 @@ async function pushStatsToServer(){
     starred: !!s.starred
   }));
   if(!rows.length) return;
-  const { error } = await supabase.from("word_progress").upsert(rows);
+  const { error } = await supabaseClient.from("word_progress").upsert(rows);
   if(error) console.warn("학습 기록 동기화 실패", error);
 }
 async function syncProgressAfterLogin(){
   if(!currentUser) return;
-  const { data, error } = await supabase.from("word_progress").select("*").eq("user_id", currentUser.id);
+  const { data, error } = await supabaseClient.from("word_progress").select("*").eq("user_id", currentUser.id);
   if(error){ console.warn("학습 기록 불러오기 실패", error); return; }
   (data || []).forEach(row=>{
     wordStats[row.word_id] = {
@@ -1412,7 +1412,7 @@ function bindManage(){
         if(!Array.isArray(data.words)) throw new Error("invalid backup file");
         if(!confirm(`단어 ${data.words.length}개를 서버 단어장에 업로드합니다. 같은 ID의 기존 단어는 덮어씁니다(로그인 필요). 계속할까요?`)) return;
         const rows = data.words.map(w=>({id:w.id, category:w.category, hanzi:w.hanzi, pinyin:w.pinyin, meaning:w.meaning, note:w.note||""}));
-        const { error } = await supabase.from("words").upsert(rows, {onConflict:"id"});
+        const { error } = await supabaseClient.from("words").upsert(rows, {onConflict:"id"});
         if(error) throw error;
         if(data.stats) Object.assign(wordStats, data.stats);
         await loadWordList();
