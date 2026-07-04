@@ -201,6 +201,7 @@
 </head>
 <body>
 <div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 "use strict";
 
@@ -620,8 +621,7 @@ function buildInitialWords(){
         hanzi: hanzi,
         pinyin: pinyin,
         meaning: meaning,
-        note: "",
-        starred: false
+        note: ""
       });
     });
   });
@@ -629,7 +629,12 @@ function buildInitialWords(){
 }
 const INITIAL_WORDS = buildInitialWords();
 
-/* ---------------- Storage (localStorage now, Supabase-ready abstraction) ---------------- */
+/* ---------------- Supabase client ---------------- */
+const SUPABASE_URL = "https://csaracwmfpdyxwyqiois.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzYXJhY3dtZnBkeXh3eXFpb2lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNDI2NTQsImV4cCI6MjA5ODcxODY1NH0.XDf6GehKKuClKPDCV5Z8_XqNiEOAyqHGZdi2ovIxtIM";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ---------------- Local cache (localStorage) ---------------- */
 async function dbGet(key){
   const raw = localStorage.getItem(key);
   return raw ? JSON.parse(raw) : null;
@@ -643,35 +648,34 @@ async function dbDelete(key){
 
 let WORDS = [];
 let wordStats = {};
+let currentUser = null;
 
-let persistWordsTimer = null;
-function persistWordList(){
-  clearTimeout(persistWordsTimer);
-  return new Promise(resolve=>{
-    persistWordsTimer = setTimeout(async ()=>{
-      await dbSet("wordList", WORDS);
-      resolve();
-    }, 300);
-  });
-}
 let persistStatsTimer = null;
 function persistStats(){
   clearTimeout(persistStatsTimer);
   return new Promise(resolve=>{
     persistStatsTimer = setTimeout(async ()=>{
       await dbSet("wordStats", wordStats);
+      if(currentUser) await pushStatsToServer();
       resolve();
     }, 300);
   });
 }
+
 async function loadWordList(){
-  const saved = await dbGet("wordList");
-  if(saved && saved.length){
-    WORDS = saved;
-  } else {
-    WORDS = INITIAL_WORDS.map(w=>({...w}));
-    await dbSet("wordList", WORDS);
+  try{
+    const { data, error } = await supabase.from("words").select("*").order("id");
+    if(error) throw error;
+    if(data && data.length){
+      WORDS = data.map(r=>({id:r.id, category:r.category, group:r.category, hanzi:r.hanzi, pinyin:r.pinyin, meaning:r.meaning, note:r.note||""}));
+      await dbSet("wordListCache", WORDS);
+      return;
+    }
+  } catch(e){
+    console.warn("단어 목록을 서버에서 불러오지 못했습니다. 캐시를 사용합니다.", e);
   }
+  const cached = await dbGet("wordListCache");
+  WORDS = (cached && cached.length) ? cached : INITIAL_WORDS.map(w=>({...w}));
 }
 async function loadStats(){
   const saved = await dbGet("wordStats");
@@ -680,36 +684,102 @@ async function loadStats(){
 
 async function addWord(data){
   const id = "w" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-  WORDS.push({
-    id,
-    category: data.category,
-    group: data.category,
-    hanzi: data.hanzi,
-    pinyin: data.pinyin,
-    meaning: data.meaning,
-    note: data.note || "",
-    starred: !!data.starred
-  });
-  await persistWordList();
+  const row = {id, category: data.category, hanzi: data.hanzi, pinyin: data.pinyin, meaning: data.meaning, note: data.note || ""};
+  const { error } = await supabase.from("words").insert(row);
+  if(error){ alert("단어 추가 실패: " + error.message); return false; }
+  WORDS.push({...row, group: row.category});
+  await dbSet("wordListCache", WORDS);
+  return true;
 }
 async function updateWord(id, patch){
+  const { error } = await supabase.from("words").update({
+    category: patch.category, hanzi: patch.hanzi, pinyin: patch.pinyin, meaning: patch.meaning, note: patch.note
+  }).eq("id", id);
+  if(error){ alert("수정 실패 (로그인이 필요합니다): " + error.message); return false; }
   const w = WORDS.find(x=>x.id===id);
-  if(!w) return;
-  Object.assign(w, patch);
-  if(patch.category){ w.group = patch.category; }
-  await persistWordList();
+  if(w){
+    Object.assign(w, patch);
+    w.group = patch.category;
+  }
+  await dbSet("wordListCache", WORDS);
+  return true;
 }
 async function deleteWord(id){
+  const { error } = await supabase.from("words").delete().eq("id", id);
+  if(error){ alert("삭제 실패 (로그인이 필요합니다): " + error.message); return false; }
   WORDS = WORDS.filter(x=>x.id!==id);
   delete wordStats[id];
-  await persistWordList();
+  await dbSet("wordListCache", WORDS);
   await persistStats();
+  return true;
 }
 async function toggleStar(id){
-  const w = WORDS.find(x=>x.id===id);
-  if(!w) return;
-  w.starred = !w.starred;
-  await persistWordList();
+  const s = wordStats[id] || {wrong:0, correct:0, seen:0, passed:0, lastSeen:null, starred:false};
+  s.starred = !s.starred;
+  wordStats[id] = s;
+  await persistStats();
+}
+function isStarred(id){
+  return !!(wordStats[id] && wordStats[id].starred);
+}
+
+/* ---------------- Auth (email magic link) ---------------- */
+async function initAuth(){
+  const { data: { session } } = await supabase.auth.getSession();
+  currentUser = session ? session.user : null;
+  if(currentUser) await syncProgressAfterLogin();
+  supabase.auth.onAuthStateChange(async (event, session)=>{
+    const wasLoggedIn = !!currentUser;
+    currentUser = session ? session.user : null;
+    if(currentUser && !wasLoggedIn){
+      await syncProgressAfterLogin();
+    }
+    render();
+  });
+}
+async function sendMagicLink(email){
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
+  if(error){ alert("로그인 링크 전송 실패: " + error.message); return false; }
+  return true;
+}
+async function signOut(){
+  await supabase.auth.signOut();
+  currentUser = null;
+  render();
+}
+async function pushStatsToServer(){
+  if(!currentUser) return;
+  const rows = Object.entries(wordStats).map(([wordId, s])=>({
+    user_id: currentUser.id,
+    word_id: wordId,
+    wrong: s.wrong || 0,
+    correct: s.correct || 0,
+    seen: s.seen || 0,
+    passed: s.passed || 0,
+    last_seen: s.lastSeen || null,
+    starred: !!s.starred
+  }));
+  if(!rows.length) return;
+  const { error } = await supabase.from("word_progress").upsert(rows);
+  if(error) console.warn("학습 기록 동기화 실패", error);
+}
+async function syncProgressAfterLogin(){
+  if(!currentUser) return;
+  const { data, error } = await supabase.from("word_progress").select("*").eq("user_id", currentUser.id);
+  if(error){ console.warn("학습 기록 불러오기 실패", error); return; }
+  (data || []).forEach(row=>{
+    wordStats[row.word_id] = {
+      wrong: row.wrong || 0,
+      correct: row.correct || 0,
+      seen: row.seen || 0,
+      passed: row.passed || 0,
+      lastSeen: row.last_seen,
+      starred: !!row.starred
+    };
+  });
+  await dbSet("wordStats", wordStats);
+  await pushStatsToServer();
 }
 
 /* ---------------- Quiz logic helpers ---------------- */
@@ -725,7 +795,7 @@ function weightOf(id){
 function pool(){
   return WORDS.filter(w=>{
     if(!state.selectedGroups.has(w.group)) return false;
-    if(state.starredOnly && !w.starred) return false;
+    if(state.starredOnly && !isStarred(w.id)) return false;
     if(state.reviewMode && wrongCountOf(w.id) === 0) return false;
     return true;
   });
@@ -898,16 +968,54 @@ function render(){
       <h1>샤오장의 중국어학습</h1>
     </div>
     <div class="subtitle">단어 ${WORDS.length}개 · 병음/한자 모두 정답 인정</div>
+    ${renderAuthBar()}
     ${renderTopNav()}
     ${body}
   `;
   bindGlobalNav();
+  bindAuthBar();
   if(state.mode === "quiz" && state.screen === "setup") bindSetup();
   if(state.mode === "quiz" && state.screen === "quiz") bindQuiz();
   if(state.mode === "quiz" && state.screen === "result") bindResult();
   if(state.mode === "sentence") bindSentence();
   if(state.mode === "notes") bindNotes();
   if(state.mode === "manage") bindManage();
+}
+
+function renderAuthBar(){
+  if(currentUser){
+    return `<div class="card" style="padding:10px 14px;">
+      <div class="row-between">
+        <span style="font-size:13px;color:var(--sub);">✅ ${h(currentUser.email)} 로그인됨 · 학습 기록이 기기 간 동기화됩니다</span>
+        <button class="btn btn-ghost" id="signOutBtn">로그아웃</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="card" style="padding:10px 14px;">
+    <div style="font-size:13px;color:var(--sub);">로그인하면 오답/즐겨찾기 기록이 여러 기기에서 이어집니다 (단어장은 로그인 없이도 공유됩니다)</div>
+    <div class="btn-row" style="margin-top:8px;">
+      <input type="text" id="loginEmail" placeholder="이메일 입력" style="flex:1;min-width:160px;">
+      <button class="btn btn-primary" id="sendMagicLinkBtn">로그인 링크 받기</button>
+    </div>
+  </div>`;
+}
+function bindAuthBar(){
+  const signOutBtn = document.getElementById("signOutBtn");
+  if(signOutBtn) signOutBtn.addEventListener("click", signOut);
+  const sendBtn = document.getElementById("sendMagicLinkBtn");
+  const emailInput = document.getElementById("loginEmail");
+  if(sendBtn && emailInput){
+    sendBtn.addEventListener("click", async ()=>{
+      const email = emailInput.value.trim();
+      if(!email){ alert("이메일을 입력해주세요."); return; }
+      sendBtn.disabled = true;
+      sendBtn.textContent = "전송 중...";
+      const ok = await sendMagicLink(email);
+      if(ok) alert(`${email}로 로그인 링크를 보냈습니다. 메일함을 확인해주세요.`);
+      sendBtn.disabled = false;
+      sendBtn.textContent = "로그인 링크 받기";
+    });
+  }
 }
 
 function renderTopNav(){
@@ -1175,7 +1283,7 @@ function renderNoteItem(w){
         <div class="word-meaning">${h(w.meaning)} · 오답 ${s.wrong||0} / 패스 ${s.passed||0}</div>
       </div>
       <div class="btn-row">
-        <button class="icon-btn star-toggle ${w.starred?"starred":""}" data-id="${w.id}">${w.starred?"★":"☆"}</button>
+        <button class="icon-btn star-toggle ${isStarred(w.id)?"starred":""}" data-id="${w.id}">${isStarred(w.id)?"★":"☆"}</button>
         <button class="icon-btn speak-word" data-hanzi="${h(w.hanzi)}">🔊</button>
       </div>
     </div>`;
@@ -1243,7 +1351,6 @@ function renderWordForm(word){
     <input type="text" id="fMeaning" value="${word ? h(word.meaning) : ""}">
     <label class="field">메모 (선택)</label>
     <input type="text" id="fNote" value="${word ? h(word.note || "") : ""}">
-    <label class="check-row"><input type="checkbox" id="fStarred" ${word && word.starred ? "checked" : ""}> 즐겨찾기</label>
     <div class="btn-row" style="margin-top:10px;">
       <button class="btn btn-primary" id="saveWordBtn">저장</button>
       <button class="btn btn-ghost" id="cancelWordBtn">취소</button>
@@ -1259,7 +1366,7 @@ function renderManageItem(w){
         <div class="word-meaning">${h(w.meaning)}</div>
       </div>
       <div class="btn-row">
-        <button class="icon-btn star-toggle ${w.starred?"starred":""}" data-id="${w.id}">${w.starred?"★":"☆"}</button>
+        <button class="icon-btn star-toggle ${isStarred(w.id)?"starred":""}" data-id="${w.id}">${isStarred(w.id)?"★":"☆"}</button>
         <button class="icon-btn speak-word" data-hanzi="${h(w.hanzi)}">🔊</button>
         <button class="icon-btn edit-word" data-id="${w.id}">✏️</button>
         <button class="icon-btn delete-word" data-id="${w.id}">🗑️</button>
@@ -1303,16 +1410,16 @@ function bindManage(){
         const text = await file.text();
         const data = JSON.parse(text);
         if(!Array.isArray(data.words)) throw new Error("invalid backup file");
-        if(!confirm(`단어 ${data.words.length}개를 가져옵니다. 같은 ID의 단어는 덮어씁니다. 계속할까요?`)) return;
-        const byId = new Map(WORDS.map(w=>[w.id, w]));
-        data.words.forEach(w=>byId.set(w.id, w));
-        WORDS = Array.from(byId.values());
+        if(!confirm(`단어 ${data.words.length}개를 서버 단어장에 업로드합니다. 같은 ID의 기존 단어는 덮어씁니다(로그인 필요). 계속할까요?`)) return;
+        const rows = data.words.map(w=>({id:w.id, category:w.category, hanzi:w.hanzi, pinyin:w.pinyin, meaning:w.meaning, note:w.note||""}));
+        const { error } = await supabase.from("words").upsert(rows, {onConflict:"id"});
+        if(error) throw error;
         if(data.stats) Object.assign(wordStats, data.stats);
-        await persistWordList();
+        await loadWordList();
         await persistStats();
         render();
       } catch(err){
-        alert("가져오기 실패: 올바른 백업 파일이 아닙니다.");
+        alert("가져오기 실패: " + (err.message || "올바른 백업 파일이 아닙니다."));
       }
       importFile.value = "";
     });
@@ -1325,17 +1432,16 @@ function bindManage(){
       const pinyin = document.getElementById("fPinyin").value.trim();
       const meaning = document.getElementById("fMeaning").value.trim();
       const note = document.getElementById("fNote").value.trim();
-      const starred = document.getElementById("fStarred").checked;
       if(!hanzi || !pinyin || !meaning){
         alert("한자, 병음, 뜻은 필수입니다.");
         return;
       }
       if(state.manage.editingId){
-        await updateWord(state.manage.editingId, {category, hanzi, pinyin, meaning, note, starred});
-        state.manage.editingId = null;
+        const ok = await updateWord(state.manage.editingId, {category, hanzi, pinyin, meaning, note});
+        if(ok) state.manage.editingId = null;
       } else {
-        await addWord({category, hanzi, pinyin, meaning, note, starred});
-        state.manage.showAdd = false;
+        const ok = await addWord({category, hanzi, pinyin, meaning, note});
+        if(ok) state.manage.showAdd = false;
       }
       render();
     });
@@ -1434,6 +1540,7 @@ function bindSentence(){
 (async function init(){
   await loadWordList();
   await loadStats();
+  await initAuth();
   render();
 })();
 </script>
