@@ -39,8 +39,7 @@
     min-height:100vh;
   }
   h1,h2,h3{margin:0 0 8px;}
-  h1{font-size:20px;}
-  .subtitle{color:var(--sub);font-size:13px;margin-bottom:16px;}
+  h1{font-size:18px;}
   .topnav{
     display:flex;
     gap:6px;
@@ -194,7 +193,11 @@
   .checklist li.ok{color:var(--good);}
   .checklist li.no{color:var(--bad);}
   small.hint{color:var(--sub);font-size:12px;}
-  .top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+  .top-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
+  .top-bar h1{margin:0;}
+  .auth-bar{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);}
+  .auth-bar input{width:140px;padding:6px 8px;font-size:13px;}
+  .auth-bar .btn{padding:6px 10px;font-size:12px;}
   .fab{
     position:fixed;
     right:max(20px, calc((100vw - 720px) / 2 + 20px));
@@ -1083,9 +1086,8 @@ function render(){
   app.innerHTML = `
     <div class="top-bar">
       <h1>샤오장의 중국어학습</h1>
+      ${renderAuthBar()}
     </div>
-    <div class="subtitle">단어 ${WORDS.length}개 · 병음/한자 모두 정답 인정</div>
-    ${renderAuthBar()}
     ${renderTopNav()}
     ${body}
   `;
@@ -1101,19 +1103,14 @@ function render(){
 
 function renderAuthBar(){
   if(currentUser){
-    return `<div class="card" style="padding:10px 14px;">
-      <div class="row-between">
-        <span style="font-size:13px;color:var(--sub);">✅ ${h(currentUser.email)} 로그인됨 · 학습 기록이 기기 간 동기화됩니다</span>
-        <button class="btn btn-ghost" id="signOutBtn">로그아웃</button>
-      </div>
+    return `<div class="auth-bar">
+      <span>✅ ${h(currentUser.email)}</span>
+      <button class="btn btn-ghost" id="signOutBtn">로그아웃</button>
     </div>`;
   }
-  return `<div class="card" style="padding:10px 14px;">
-    <div style="font-size:13px;color:var(--sub);">로그인하면 오답/즐겨찾기 기록이 여러 기기에서 이어집니다 (단어장은 로그인 없이도 공유됩니다)</div>
-    <div class="btn-row" style="margin-top:8px;">
-      <input type="text" id="loginEmail" placeholder="이메일 입력" style="flex:1;min-width:160px;">
-      <button class="btn btn-primary" id="sendMagicLinkBtn">로그인 링크 받기</button>
-    </div>
+  return `<div class="auth-bar">
+    <input type="text" id="loginEmail" placeholder="이메일로 로그인">
+    <button class="btn btn-primary" id="sendMagicLinkBtn">로그인</button>
   </div>`;
 }
 function bindAuthBar(){
@@ -1130,7 +1127,7 @@ function bindAuthBar(){
       const ok = await sendMagicLink(email);
       if(ok) alert(`${email}로 로그인 링크를 보냈습니다. 메일함을 확인해주세요.`);
       sendBtn.disabled = false;
-      sendBtn.textContent = "로그인 링크 받기";
+      sendBtn.textContent = "로그인";
     });
   }
 }
