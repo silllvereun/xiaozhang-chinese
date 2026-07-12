@@ -1194,6 +1194,9 @@ const CHARACTER_SEED = {
 };
 
 
+/* ---------------- AI 첨삭 프록시 (선택, 비워두면 규칙 기반 채점만 사용) ---------------- */
+const AI_PROXY_URL = '';   // 예: 'https://zh-grader.<계정명>.workers.dev' — 배포 방법은 DEPLOY_AI_PROXY.md 참고
+
 /* ---------------- Supabase client ---------------- */
 const SUPABASE_URL = "https://csaracwmfpdyxwyqiois.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzYXJhY3dtZnBkeXh3eXFpb2lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNDI2NTQsImV4cCI6MjA5ODcxODY1NH0.XDf6GehKKuClKPDCV5Z8_XqNiEOAyqHGZdi2ovIxtIM";
@@ -1524,6 +1527,24 @@ function gradeSentence(word, text){
   };
 }
 
+/* ---------------- Sentence grading (AI, optional — via AI_PROXY_URL) ---------------- */
+async function gradeSentenceWithAI(word, text){
+  if(!AI_PROXY_URL) return null;
+  try{
+    const res = await fetch(AI_PROXY_URL, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({hanzi: word.hanzi, pinyin: word.pinyin, meaning: word.meaning, sentence: text})
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    if(!data.ok) return null;
+    return data;
+  }catch{
+    return null;
+  }
+}
+
 /* ---------------- TTS ---------------- */
 let voicesPromise = null;
 function loadVoices(){
@@ -1832,7 +1853,7 @@ const state = {
     showImport: false,
     importBusy: false
   },
-  sentence: {word: null, text: "", result: null},
+  sentence: {word: null, text: "", result: null, aiFeedback: null, aiLoading: false},
   sheet: null,
   charEdit: null
 };
@@ -2554,22 +2575,25 @@ function pickSentenceWord(){
   state.sentence.word = candidates[idx];
   state.sentence.text = "";
   state.sentence.result = null;
+  state.sentence.aiFeedback = null;
+  state.sentence.aiLoading = false;
 }
 function renderSentence(){
   if(!state.sentence.word) pickSentenceWord();
   const word = state.sentence.word;
   const result = state.sentence.result;
+  const ai = state.sentence.aiFeedback;
   return `
   <div class="card">
     <h3>문장 만들기</h3>
-    <small class="hint">서버 없이 동작하는 규칙 기반 채점입니다: 단어 포함 여부, 문장 길이, 문장부호, 중국어 작성 여부를 확인합니다. 문법까지 검사하지는 않습니다.</small>
+    <small class="hint">${AI_PROXY_URL ? "형식(단어 포함, 길이, 문장부호, 중국어 작성)을 먼저 확인한 뒤, 통과하면 AI가 자연스러운 표현인지 첨삭해줍니다." : "서버 없이 동작하는 규칙 기반 채점입니다: 단어 포함 여부, 문장 길이, 문장부호, 중국어 작성 여부를 확인합니다. 문법까지 검사하지는 않습니다."}</small>
     <div class="quiz-meaning" style="margin-top:14px;">${renderTappableHanzi(word.hanzi)} <span class="word-pinyin">(${h(word.pinyin)})</span></div>
     <div class="quiz-hint">${h(word.meaning)} — 이 단어를 사용해 중국어 문장을 만들어보세요</div>
     <textarea id="sentenceInput" placeholder="예: 我今天很高兴。">${h(state.sentence.text)}</textarea>
     <div class="btn-row" style="margin-top:12px;">
       <button class="btn" id="speakWordBtn">🔊 단어 발음</button>
       <button class="btn" id="anotherWordBtn">다른 단어</button>
-      <button class="btn btn-primary" id="gradeBtn">채점하기</button>
+      <button class="btn btn-primary" id="gradeBtn" ${state.sentence.aiLoading ? "disabled" : ""}>${state.sentence.aiLoading ? "채점 중..." : "채점하기"}</button>
     </div>
     ${result ? `
       <div class="feedback ${result.pass ? "correct" : "wrong"}">
@@ -2578,6 +2602,15 @@ function renderSentence(){
           ${result.items.map(i=>`<li class="${i.ok?"ok":"no"}">${i.ok?"✓":"✗"} ${h(i.label)}</li>`).join("")}
         </ul>
       </div>
+      ${result.pass && state.sentence.aiLoading ? `<div class="quiz-hint" style="margin-top:8px;margin-bottom:0;">🤖 AI 첨삭 확인 중...</div>` : ""}
+      ${result.pass && ai ? `
+        <div class="feedback ${ai.natural ? "correct" : "wrong"}" style="margin-top:8px;">
+          🤖 ${ai.natural ? "AI가 자연스러운 문장이라고 판단했습니다." : "AI 첨삭 의견"}
+          ${ai.feedback ? `<div style="margin-top:4px;">${h(ai.feedback)}</div>` : ""}
+          ${!ai.natural && ai.corrected ? `<div style="margin-top:4px;">추천 문장: ${h(ai.corrected)}</div>` : ""}
+        </div>
+      ` : ""}
+      ${result.pass && !ai && !state.sentence.aiLoading && AI_PROXY_URL ? `<div class="quiz-hint" style="margin-top:8px;margin-bottom:0;">AI 첨삭을 불러오지 못해 형식 검사 결과만 표시합니다.</div>` : ""}
       <div class="btn-row">
         <button class="btn" id="speakSentenceBtn">🔊 내 문장 듣기</button>
       </div>
@@ -2596,9 +2629,22 @@ function bindSentence(){
   if(anotherWordBtn) anotherWordBtn.addEventListener("click", ()=>{ pickSentenceWord(); render(); });
   const gradeBtn = document.getElementById("gradeBtn");
   if(gradeBtn) gradeBtn.addEventListener("click", async ()=>{
-    const result = gradeSentence(word, state.sentence.text);
+    const text = state.sentence.text.trim();
+    const result = gradeSentence(word, text);
     state.sentence.result = result;
-    if(result.pass) await saveSentence(state.sentence.text.trim(), word);
+    state.sentence.aiFeedback = null;
+    if(!result.pass){
+      render();
+      return;
+    }
+    await saveSentence(text, word);
+    if(AI_PROXY_URL){
+      state.sentence.aiLoading = true;
+      render();
+      const ai = await gradeSentenceWithAI(word, text);
+      state.sentence.aiFeedback = ai;
+      state.sentence.aiLoading = false;
+    }
     render();
   });
   const speakSentenceBtn = document.getElementById("speakSentenceBtn");
