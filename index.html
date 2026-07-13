@@ -1295,12 +1295,41 @@ let CHARACTERS = {};
 let SENTENCES = [];
 let SENTENCE_WORDS = [];
 
-async function loadCharacters(){
-  const saved = await dbGet("characters");
-  CHARACTERS = Object.assign({}, CHARACTER_SEED, saved || {});
+function rowToCharacter(r){
+  return {pinyin:r.pinyin, korean_name:r.korean_name||"", meaning:r.meaning||"", etymology:r.etymology||"", isDraft:!!r.is_draft};
 }
-async function persistCharacters(){
-  await dbSet("characters", CHARACTERS);
+async function seedCharactersToSupabase(){
+  const CHUNK_SIZE = 50;
+  const entries = Object.entries(CHARACTER_SEED).map(([hanzi, c])=>({
+    hanzi, pinyin:c.pinyin, korean_name:c.korean_name||"", meaning:c.meaning||"", etymology:c.etymology||"", is_draft: c.isDraft !== false
+  }));
+  for(let i=0; i<entries.length; i+=CHUNK_SIZE){
+    const chunk = entries.slice(i, i+CHUNK_SIZE);
+    const { error } = await supabaseClient.from("characters").insert(chunk);
+    if(error){ console.warn("한자 초기 데이터 업로드 실패", error); break; }
+  }
+}
+async function loadCharacters(){
+  try{
+    const { data, error } = await supabaseClient.from("characters").select("*");
+    if(error) throw error;
+    if(data && data.length){
+      CHARACTERS = {};
+      data.forEach(r=>{ CHARACTERS[r.hanzi] = rowToCharacter(r); });
+      await dbSet("charactersCache", CHARACTERS);
+      return;
+    }
+    if(data && data.length === 0){
+      await seedCharactersToSupabase();
+      CHARACTERS = {...CHARACTER_SEED};
+      await dbSet("charactersCache", CHARACTERS);
+      return;
+    }
+  } catch(e){
+    console.warn("한자 정보를 서버에서 불러오지 못했습니다. 캐시를 사용합니다.", e);
+  }
+  const cached = await dbGet("charactersCache");
+  CHARACTERS = (cached && Object.keys(cached).length) ? cached : {...CHARACTER_SEED};
 }
 function isHanziChar(c){
   return /[一-鿿]/.test(c);
@@ -1310,8 +1339,19 @@ function getCharacter(hanzi){
 }
 async function updateCharacter(hanzi, patch){
   const cur = CHARACTERS[hanzi] || {pinyin:"", korean_name:"", meaning:"", etymology:""};
+  const row = {
+    hanzi,
+    pinyin: patch.pinyin !== undefined ? patch.pinyin : cur.pinyin,
+    korean_name: patch.korean_name !== undefined ? patch.korean_name : cur.korean_name,
+    meaning: patch.meaning !== undefined ? patch.meaning : cur.meaning,
+    etymology: patch.etymology !== undefined ? patch.etymology : cur.etymology,
+    is_draft: false
+  };
+  const { error } = await supabaseClient.from("characters").upsert(row, {onConflict:"hanzi"});
+  if(error){ alert("한자 정보 수정 실패 (로그인이 필요합니다): " + error.message); return false; }
   CHARACTERS[hanzi] = {...cur, ...patch, isDraft:false};
-  await persistCharacters();
+  await dbSet("charactersCache", CHARACTERS);
+  return true;
 }
 function getWordsByCharacter(hanzi){
   return WORDS.filter(w=>[...w.hanzi].includes(hanzi));
@@ -1320,14 +1360,58 @@ function getWordCharacters(word){
   return [...word.hanzi].filter(isHanziChar);
 }
 
-/* ---------------- Sentences (문장 만들기 자동 저장) ---------------- */
+/* ---------------- Sentences (문장 만들기 자동 저장, 로그인 시 계정별 Supabase 동기화) ---------------- */
 async function loadSentences(){
   SENTENCES = (await dbGet("sentences")) || [];
   SENTENCE_WORDS = (await dbGet("sentenceWords")) || [];
 }
-async function persistSentences(){
+async function persistSentencesLocal(){
   await dbSet("sentences", SENTENCES);
   await dbSet("sentenceWords", SENTENCE_WORDS);
+}
+async function pushSentenceToServer(sentence, wordIds, targetWordId){
+  if(!currentUser) return;
+  const { error } = await supabaseClient.from("sentences").insert({
+    id: sentence.id, user_id: currentUser.id, content: sentence.content,
+    translation: sentence.translation || "", created_at: sentence.createdAt
+  });
+  if(error){ console.warn("문장 서버 저장 실패", error); return; }
+  const rows = Array.from(wordIds).map(wordId=>({sentence_id: sentence.id, word_id: wordId, is_target: wordId === targetWordId}));
+  if(rows.length){
+    const { error: swErr } = await supabaseClient.from("sentence_words").insert(rows);
+    if(swErr) console.warn("문장-단어 연결 저장 실패", swErr);
+  }
+}
+async function syncSentencesAfterLogin(){
+  if(!currentUser) return;
+  const { data: existing, error: exErr } = await supabaseClient.from("sentences").select("id").eq("user_id", currentUser.id);
+  if(exErr){ console.warn("문장 동기화 실패", exErr); return; }
+  const existingIds = new Set((existing || []).map(r=>r.id));
+  for(const s of SENTENCES){
+    if(existingIds.has(s.id)) continue;
+    const wordIds = SENTENCE_WORDS.filter(sw=>sw.sentenceId===s.id).map(sw=>sw.wordId);
+    const target = SENTENCE_WORDS.find(sw=>sw.sentenceId===s.id && sw.isTarget);
+    await pushSentenceToServer(s, wordIds, target ? target.wordId : null);
+  }
+  const { data: sentRows, error: sErr } = await supabaseClient.from("sentences").select("*").eq("user_id", currentUser.id).order("created_at", {ascending:false});
+  if(sErr){ console.warn("문장 불러오기 실패", sErr); return; }
+  SENTENCES = (sentRows || []).map(r=>({id:r.id, content:r.content, translation:r.translation || "", createdAt:r.created_at}));
+  const ids = SENTENCES.map(s=>s.id);
+  if(ids.length){
+    const { data: swRows, error: swErr } = await supabaseClient.from("sentence_words").select("*").in("sentence_id", ids);
+    if(swErr){ console.warn("문장-단어 연결 불러오기 실패", swErr); }
+    SENTENCE_WORDS = (swRows || []).map(r=>({sentenceId:r.sentence_id, wordId:r.word_id, isTarget:!!r.is_target}));
+  } else {
+    SENTENCE_WORDS = [];
+  }
+  await persistSentencesLocal();
+}
+function sentencePinyin(content){
+  return [...String(content)].map(c=>{
+    if(!isHanziChar(c)) return c;
+    const info = getCharacter(c);
+    return (info && info.pinyin) ? info.pinyin : c;
+  }).join("");
 }
 function findWordsInText(text){
   const found = [];
@@ -1349,7 +1433,7 @@ function findWordsInText(text){
   });
   return found;
 }
-async function saveSentence(text, targetWord){
+async function saveSentence(text, targetWord, translation){
   const alreadySaved = SENTENCE_WORDS.some(sw=>sw.wordId===targetWord.id && sw.isTarget &&
     SENTENCES.some(s=>s.id===sw.sentenceId && s.content===text));
   if(alreadySaved) return;
@@ -1359,13 +1443,15 @@ async function saveSentence(text, targetWord){
   const sentence = {
     id: "s" + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
     content: text,
+    translation: (translation || "").trim(),
     createdAt: new Date().toISOString()
   };
   SENTENCES.push(sentence);
   wordIds.forEach(wordId=>{
     SENTENCE_WORDS.push({sentenceId: sentence.id, wordId, isTarget: wordId === targetWord.id});
   });
-  await persistSentences();
+  await persistSentencesLocal();
+  await pushSentenceToServer(sentence, wordIds, targetWord.id);
 }
 function getSentencesByWord(wordId){
   const sentenceIds = SENTENCE_WORDS.filter(sw=>sw.wordId===wordId).map(sw=>({id:sw.sentenceId, isTarget:sw.isTarget}));
@@ -1382,12 +1468,16 @@ function getSentencesByWord(wordId){
 async function initAuth(){
   const { data: { session } } = await supabaseClient.auth.getSession();
   currentUser = session ? session.user : null;
-  if(currentUser) await syncProgressAfterLogin();
+  if(currentUser){
+    await syncProgressAfterLogin();
+    await syncSentencesAfterLogin();
+  }
   supabaseClient.auth.onAuthStateChange(async (event, session)=>{
     const wasLoggedIn = !!currentUser;
     currentUser = session ? session.user : null;
     if(currentUser && !wasLoggedIn){
       await syncProgressAfterLogin();
+      await syncSentencesAfterLogin();
     }
     render();
   });
@@ -1509,16 +1599,13 @@ function recordAnswer(word, outcome){
 /* ---------------- Sentence grading (rule-based, no server required) ---------------- */
 function gradeSentence(word, text){
   const trimmed = String(text || "").trim();
-  const hasWord = trimmed.includes(word.hanzi);
-  const hanziCount = (trimmed.match(/[一-鿿]/g) || []).length;
-  const longEnough = hanziCount >= 4;
-  const endsProperly = /[。！？!?]$/.test(trimmed);
+  const hasWordHanzi = trimmed.includes(word.hanzi);
+  const hasWordPinyin = normalize(trimmed).includes(normalize(word.pinyin));
+  const hasWord = hasWordHanzi || hasWordPinyin;
   const noKorean = !/[가-힣]/.test(trimmed);
   const items = [
-    {ok: hasWord, label: `목표 단어 "${word.hanzi}" 포함`},
-    {ok: longEnough, label: "한자 4자 이상으로 작성"},
-    {ok: endsProperly, label: "문장부호(。！？)로 끝맺기"},
-    {ok: noKorean, label: "중국어로만 작성(한글 미포함)"}
+    {ok: hasWord, label: `목표 단어 "${word.hanzi}(${word.pinyin})" 포함 (한자 또는 병음 입력 모두 인정)`},
+    {ok: noKorean, label: "중국어(한자 또는 병음)로만 작성(한글 미포함)"}
   ];
   const passCount = items.filter(i=>i.ok).length;
   return {
@@ -1750,13 +1837,13 @@ function bindEntitySheet(){
   const saveBtn = document.getElementById("saveCharEditBtn");
   if(saveBtn) saveBtn.addEventListener("click", async ()=>{
     const hanzi = saveBtn.getAttribute("data-hanzi");
-    await updateCharacter(hanzi, {
+    const ok = await updateCharacter(hanzi, {
       pinyin: document.getElementById("editPinyin").value.trim(),
       korean_name: document.getElementById("editKoreanName").value.trim(),
       meaning: document.getElementById("editMeaning").value.trim(),
       etymology: document.getElementById("editEtymology").value.trim()
     });
-    state.charEdit = null;
+    if(ok) state.charEdit = null;
     render();
   });
   app.querySelectorAll(".sheet-speak-btn").forEach(btn=>{
@@ -1853,7 +1940,9 @@ const state = {
     showImport: false,
     importBusy: false
   },
-  sentence: {word: null, text: "", result: null, aiFeedback: null, aiLoading: false},
+  sentence: {word: null, text: "", translation: "", result: null, aiFeedback: null, aiLoading: false},
+  sentenceTab: "write",
+  practice: {current: null, input: "", result: null, checked: false},
   sheet: null,
   charEdit: null
 };
@@ -2569,16 +2658,36 @@ function bindManage(){
 }
 
 /* ---------------- Sentence practice screen ---------------- */
+function renderSentence(){
+  const tabs = `<div class="topnav" style="margin-bottom:12px;">
+    <button class="tab ${state.sentenceTab==="write"?"active":""}" data-sentence-tab="write">✍ 문장 만들기</button>
+    <button class="tab ${state.sentenceTab==="practice"?"active":""}" data-sentence-tab="practice">📖 내 문장 연습</button>
+  </div>`;
+  return tabs + (state.sentenceTab === "practice" ? renderSentencePractice() : renderSentenceWrite());
+}
+function bindSentence(){
+  app.querySelectorAll("[data-sentence-tab]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      state.sentenceTab = btn.getAttribute("data-sentence-tab");
+      if(state.sentenceTab === "practice") pickPracticeSentence();
+      render();
+    });
+  });
+  if(state.sentenceTab === "practice") bindSentencePractice();
+  else bindSentenceWrite();
+}
+
 function pickSentenceWord(){
   const candidates = WORDS.length ? WORDS : INITIAL_WORDS;
   const idx = Math.floor(Math.random() * candidates.length);
   state.sentence.word = candidates[idx];
   state.sentence.text = "";
+  state.sentence.translation = "";
   state.sentence.result = null;
   state.sentence.aiFeedback = null;
   state.sentence.aiLoading = false;
 }
-function renderSentence(){
+function renderSentenceWrite(){
   if(!state.sentence.word) pickSentenceWord();
   const word = state.sentence.word;
   const result = state.sentence.result;
@@ -2586,10 +2695,12 @@ function renderSentence(){
   return `
   <div class="card">
     <h3>문장 만들기</h3>
-    <small class="hint">${AI_PROXY_URL ? "형식(단어 포함, 길이, 문장부호, 중국어 작성)을 먼저 확인한 뒤, 통과하면 AI가 자연스러운 표현인지 첨삭해줍니다." : "서버 없이 동작하는 규칙 기반 채점입니다: 단어 포함 여부, 문장 길이, 문장부호, 중국어 작성 여부를 확인합니다. 문법까지 검사하지는 않습니다."}</small>
+    <small class="hint">${AI_PROXY_URL ? "형식(단어 포함, 중국어 작성)을 먼저 확인한 뒤, 통과하면 AI가 자연스러운 표현인지 첨삭해줍니다. 한자 또는 병음 어느 쪽으로 써도 채점됩니다." : "서버 없이 동작하는 규칙 기반 채점입니다: 단어 포함 여부, 중국어(한자 또는 병음) 작성 여부를 확인합니다. 문법까지 검사하지는 않습니다."}</small>
     <div class="quiz-meaning" style="margin-top:14px;">${renderTappableHanzi(word.hanzi)} <span class="word-pinyin">(${h(word.pinyin)})</span></div>
-    <div class="quiz-hint">${h(word.meaning)} — 이 단어를 사용해 중국어 문장을 만들어보세요</div>
-    <textarea id="sentenceInput" placeholder="예: 我今天很高兴。">${h(state.sentence.text)}</textarea>
+    <div class="quiz-hint">${h(word.meaning)} — 이 단어를 사용해 중국어 문장을 만들어보세요 (한자 또는 병음)</div>
+    <textarea id="sentenceInput" placeholder="예: 我今天很高兴。 또는 wo jin tian hen gao xing">${h(state.sentence.text)}</textarea>
+    <label class="field">번역 (한국어 뜻, 선택 — 적어두면 '내 문장 연습'에서 이 문장으로 복습할 수 있어요)</label>
+    <input type="text" id="sentenceTranslation" placeholder="예: 나는 오늘 기분이 좋다" value="${h(state.sentence.translation)}">
     <div class="btn-row" style="margin-top:12px;">
       <button class="btn" id="speakWordBtn">🔊 단어 발음</button>
       <button class="btn" id="anotherWordBtn">다른 단어</button>
@@ -2617,11 +2728,15 @@ function renderSentence(){
     ` : ""}
   </div>`;
 }
-function bindSentence(){
+function bindSentenceWrite(){
   const word = state.sentence.word;
   const input = document.getElementById("sentenceInput");
   if(input){
     input.addEventListener("input", e=>{ state.sentence.text = e.target.value; });
+  }
+  const translationInput = document.getElementById("sentenceTranslation");
+  if(translationInput){
+    translationInput.addEventListener("input", e=>{ state.sentence.translation = e.target.value; });
   }
   const speakWordBtn = document.getElementById("speakWordBtn");
   if(speakWordBtn) speakWordBtn.addEventListener("click", ()=>speak(word.hanzi));
@@ -2637,7 +2752,7 @@ function bindSentence(){
       render();
       return;
     }
-    await saveSentence(text, word);
+    await saveSentence(text, word, state.sentence.translation);
     if(AI_PROXY_URL){
       state.sentence.aiLoading = true;
       render();
@@ -2649,6 +2764,89 @@ function bindSentence(){
   });
   const speakSentenceBtn = document.getElementById("speakSentenceBtn");
   if(speakSentenceBtn) speakSentenceBtn.addEventListener("click", ()=>speak(state.sentence.text));
+}
+
+/* ---------------- "내 문장 연습" — 로그인 계정에 저장된 내 문장으로 복습 퀴즈 ---------------- */
+function practiceSentencePool(){
+  return SENTENCES.filter(s=>s.translation && s.translation.trim());
+}
+function pickPracticeSentence(){
+  const pool = practiceSentencePool();
+  if(!pool.length){
+    state.practice.current = null;
+    state.practice.input = "";
+    state.practice.result = null;
+    state.practice.checked = false;
+    return;
+  }
+  const idx = Math.floor(Math.random() * pool.length);
+  state.practice.current = pool[idx];
+  state.practice.input = "";
+  state.practice.result = null;
+  state.practice.checked = false;
+}
+function normalizeForPractice(s){
+  return normalize(s).replace(/[。！？.!?,，]/g, "");
+}
+function checkPracticeAnswer(sentence, input){
+  const trimmed = String(input || "").trim();
+  if(!trimmed) return false;
+  const normInput = normalizeForPractice(trimmed);
+  return normInput === normalizeForPractice(sentence.content) || normInput === normalizeForPractice(sentencePinyin(sentence.content));
+}
+function renderSentencePractice(){
+  if(!currentUser){
+    return `<div class="card">
+      <h3>내 문장 연습</h3>
+      <div class="empty">로그인하면 그동안 만든 문장을 계정에 저장하고, 한국어 뜻을 보고 병음/한자로 다시 써보는 복습 연습을 할 수 있어요. 상단에서 먼저 로그인해주세요.</div>
+    </div>`;
+  }
+  if(!state.practice.current && practiceSentencePool().length) pickPracticeSentence();
+  const s = state.practice.current;
+  if(!s){
+    return `<div class="card">
+      <h3>내 문장 연습</h3>
+      <div class="empty">아직 복습할 문장이 없어요. '문장 만들기'에서 채점을 통과한 뒤 번역(한국어 뜻)을 적어 저장하면 여기서 복습할 수 있어요.</div>
+    </div>`;
+  }
+  const result = state.practice.result;
+  return `
+  <div class="card">
+    <h3>내 문장 연습</h3>
+    <small class="hint">한국어 뜻을 보고 그 문장을 병음이나 한자로 다시 써보세요.</small>
+    <div class="quiz-meaning" style="margin-top:14px;">${h(s.translation)}</div>
+    <textarea id="practiceInput" placeholder="병음 또는 한자로 입력">${h(state.practice.input)}</textarea>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn" id="practiceNextBtn">다음 문장</button>
+      <button class="btn btn-primary" id="practiceCheckBtn">확인</button>
+    </div>
+    ${state.practice.checked ? `
+      <div class="feedback ${result ? "correct" : "wrong"}">
+        ${result ? "정답입니다!" : "다시 확인해보세요"}
+        <div style="margin-top:6px;">정답: ${renderTappableHanzi(s.content)}</div>
+        <div class="word-pinyin">${h(sentencePinyin(s.content))}</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="practiceSpeakBtn">🔊 정답 듣기</button>
+      </div>
+    ` : ""}
+  </div>`;
+}
+function bindSentencePractice(){
+  if(!currentUser || !state.practice.current) return;
+  const s = state.practice.current;
+  const input = document.getElementById("practiceInput");
+  if(input) input.addEventListener("input", e=>{ state.practice.input = e.target.value; });
+  const nextBtn = document.getElementById("practiceNextBtn");
+  if(nextBtn) nextBtn.addEventListener("click", ()=>{ pickPracticeSentence(); render(); });
+  const checkBtn = document.getElementById("practiceCheckBtn");
+  if(checkBtn) checkBtn.addEventListener("click", ()=>{
+    state.practice.result = checkPracticeAnswer(s, state.practice.input);
+    state.practice.checked = true;
+    render();
+  });
+  const speakBtn = document.getElementById("practiceSpeakBtn");
+  if(speakBtn) speakBtn.addEventListener("click", ()=>speak(s.content));
 }
 
 /* ---------------- Init ---------------- */
