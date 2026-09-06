@@ -12,6 +12,8 @@
 <link rel="canonical" href="https://silllvereun.github.io/xiaozhang-chinese/">
 <meta name="robots" content="index,follow">
 <style>
+  .brand-logo{display:block;width:164px;height:164px;object-fit:contain;max-width:100%;}
+  @media(max-width:640px){.brand-logo{width:132px;height:132px;}}
   :root{
     --bg:#f6f5f2;
     --card:#ffffff;
@@ -1964,7 +1966,7 @@ function render(){
   }
   app.innerHTML = `
     <div class="top-bar">
-      <h1>샤오장의 중국어학습</h1>
+      <img class="brand-logo" src="assets/logo.png" alt="샤오장학당 · 小张学堂">
       ${renderAuthBar()}
     </div>
     ${renderTopNav()}
