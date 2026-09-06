@@ -1,0 +1,13 @@
+{
+  "name": "xiaozhang-academy",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/serve.js .",
+    "test": "node --test tests/*.test.js",
+    "lint": "node scripts/check.js",
+    "build": "node scripts/build.js",
+    "preview": "node scripts/serve.js dist"
+  },
+  "engines": { "node": ">=22" }
+}

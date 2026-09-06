@@ -1,0 +1,12 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {grade,align,normalizeAnswer,updateReview}=require('../scoring');
+for(const answer of ['我今天到公司有点晚。','我今天到公司有点晚','  我 今 天 到 公司 有点 晚。  ','我今天到公司有点晚！'])test('normalized correct: '+answer,()=>assert.equal(grade('我今天到公司有点晚。',answer).isCorrect,true));
+for(const answer of ['我今天来公司有点晚。','我今天公司有点晚。','我今天到到公司有点晚。','','我今天到公司有点晚😀','我今天到公司有点晚x'])test('incorrect: '+answer,()=>assert.equal(grade('我今天到公司有点晚。',answer).isCorrect,false));
+test('accepted traditional answer',()=>assert.equal(grade('学习','學習',['學習']).isCorrect,true));
+test('NFKC punctuation and Latin spacing',()=>{assert.equal(grade('ＡＢ，Ｃ！','AB,C!').isCorrect,true);assert.notEqual(normalizeAnswer('a b'),normalizeAnswer('ab'));});
+test('empty answer and supplementary code points',()=>{assert.equal(grade('你好','').accuracy,0);assert.equal(align('你好😀','你好').distance,1);assert.equal(grade('你好','你').accuracy,50);});
+test('deletion does not cascade into later mismatches',()=>{const d=grade('我今天到公司','我天到公司').diff;assert.equal(d.filter(x=>x.kind==='delete').length,1);assert.equal(d.filter(x=>x.kind==='equal').length,5);});
+test('insert and replacement distinguished',()=>{assert.equal(grade('你好','你真好').diff[1].kind,'insert');assert.equal(grade('你好','你坏').diff[1].kind,'replace');});
+test('90% accuracy remains incorrect',()=>{const r=grade('一二三四五六七八九十','一二三四五六七八九千');assert.equal(r.accuracy,90);assert.equal(r.isCorrect,false);});
+test('review lifecycle deduplicates, masters and reopens',()=>{let r=null;const a={content_id:'x',content_type:'sentence',created_at:'2026-09-06T00:00:00Z',is_correct:false,skipped:false};r=updateReview(r,a);r=updateReview(r,a);assert.equal(r.wrong_count,2);for(let i=0;i<3;i++)r=updateReview(r,{...a,is_correct:true});assert.equal(r.status,'mastered');assert.equal(r.correct_count,3);r=updateReview(r,{...a,skipped:true});assert.equal(r.status,'wrong');assert.equal(r.consecutive_correct,0);assert.equal(r.wrong_count,3);});
+test('correct fresh item does not become an error',()=>assert.equal(updateReview(null,{is_correct:true}),null));
